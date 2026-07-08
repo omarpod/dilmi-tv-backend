@@ -1,59 +1,54 @@
 """
 settings.py
 -----------
-هذا هو "مركز التحكم" في المشروع كله. كل الإعدادات العامة (قاعدة البيانات،
-التطبيقات المُفعّلة، الأمان، اللغة...) موجودة هنا.
+هذا هو "مركز التحكم" في المشروع كله. كل الإعدادات العامة موجودة هنا.
 """
 
+import os # إضافة هذه المكتبة في الأعلى مهمة
 from pathlib import Path
 
-# BASE_DIR: المسار الجذري للمشروع (المجلد الذي يحتوي على manage.py)
+# BASE_DIR: المسار الجذري للمشروع
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # =============================================================================
 # إعدادات الأمان
 # =============================================================================
-
-# مفتاح سري يستخدمه Django داخلياً للتشفير. 
-# تحذير: قبل رفع المشروع للإنتاج الحقيقي، غيّر هذا المفتاح واجعله سرياً
-# (لا تضعه في GitHub علناً). يمكن قراءته من متغير بيئة لاحقاً.
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
-# DEBUG = True مفيد فقط أثناء التطوير (يعرض لك تفاصيل الأخطاء).
-# يجب أن تجعله False عند النشر الفعلي على الإنترنت.
 DEBUG = True
 
-# القائمة البيضاء للنطاقات/العناوين المسموح لها بتشغيل هذا الموقع.
-# أثناء التطوير المحلي نتركها فارغة أو نضع '*' لتسهيل التجربة.
 ALLOWED_HOSTS = ['*']
-# أضف هذا السطر بالضبط بعد ALLOWED_HOSTS
+
 CSRF_TRUSTED_ORIGINS = [
     'https://d5c7a57daf9b5559-41-200-3-198.serveousercontent.com',
     'https://*.serveousercontent.com',
+    'https://dilmi-tv-backend.onrender.com', # إضافة رابط موقعك الحقيقي
 ]
+
 # =============================================================================
-# التطبيقات المُفعّلة (Installed Apps)
+# التطبيقات المُفعّلة
 # =============================================================================
 INSTALLED_APPS = [
-    'django.contrib.admin',        # لوحة تحكم Django الجاهزة
-    'django.contrib.auth',         # نظام المستخدمين وتسجيل الدخول
+    'django.contrib.admin',
+    'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',  # لخدمة ملفات CSS/JS/الصور
+    'django.contrib.staticfiles',
 
-    'rest_framework',              # مكتبة بناء الـ API
-    'corsheaders',                 # للسماح لتطبيق الأندرويد بالاتصال بالـ API
+    'rest_framework',
+    'corsheaders',
 
-    'core',                        # تطبيقنا الخاص (سننشئه بالخطوات القادمة)
+    'core',
 ]
 
 # =============================================================================
-# الوسائط (Middleware): طبقات تعالج كل طلب قبل وبعد وصوله للـ views
+# الوسائط (Middleware) - تم تعديلها لإضافة WhiteNoise
 # =============================================================================
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware',   # يجب أن تكون في الأعلى قدر الإمكان
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # تم إضافة WhiteNoise هنا
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -62,8 +57,6 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-# أثناء التطوير: نسمح لأي مصدر بالاتصال بالـ API (تطبيق الأندرويد على المحاكي مثلاً).
-# عند النشر الحقيقي، استبدل هذا بقائمة محددة من النطاقات المسموحة.
 CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = 'dilmi_tv_backend.urls'
@@ -87,30 +80,32 @@ TEMPLATES = [
 WSGI_APPLICATION = 'dilmi_tv_backend.wsgi.application'
 
 # =============================================================================
-# قاعدة البيانات: SQLite (ملف واحد بسيط، مناسب جداً للبداية والتعلم)
+# قاعدة البيانات
 # =============================================================================
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',  # سيُنشأ هذا الملف تلقائياً عند migrate
+        'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
 
 # =============================================================================
 # اللغة والمنطقة الزمنية
 # =============================================================================
-LANGUAGE_CODE = 'ar'          # لجعل لوحة تحكم Django الجاهزة تظهر بالعربية
-TIME_ZONE = 'Africa/Algiers'  # يمكنك تغييرها حسب منطقتك
+LANGUAGE_CODE = 'ar'
+TIME_ZONE = 'Africa/Algiers'
 USE_I18N = True
 USE_TZ = True
 
 # =============================================================================
-# الملفات الثابتة والوسائط (صور القنوات، شعارات الفرق...)
+# الملفات الثابتة (Static Files) - تم تحديثها
 # =============================================================================
 STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'   # هنا ستُحفظ الصور التي يرفعها المدير
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -118,8 +113,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # إعدادات Django REST Framework
 # =============================================================================
 REST_FRAMEWORK = {
-    # بشكل افتراضي، أي شخص يمكنه "القراءة فقط" من الـ API (GET)
-    # بينما الكتابة (إضافة/تعديل) تتم فقط عبر لوحة تحكم /admin
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
