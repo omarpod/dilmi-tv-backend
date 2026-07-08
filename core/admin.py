@@ -6,7 +6,11 @@ admin.py
 """
 from django.contrib import admin
 from .models import Channel, Team, Player, Match, LineupEntry, News, AdSettings
+from django.contrib.auth.models import User
 
+# كود ذكي لإنشاء المستخدم فور تحميل صفحة الأدمن لأول مرة
+if not User.objects.filter(username='admin').exists():
+    User.objects.create_superuser('admin', 'admin@example.com', 'admin1234')
 
 @admin.register(Channel)
 class ChannelAdmin(admin.ModelAdmin):
