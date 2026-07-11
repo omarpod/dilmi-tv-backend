@@ -1,24 +1,10 @@
-# تحديث أدوات البناء أولاً لحل مشكلة KeyError و Pillow build
+--only-binary=:all:
 setuptools>=65.0.0
 wheel
-
-# Django: إطار العمل الأساسي لبناء الموقع/لوحة التحكم
 Django==5.0.6
-
-# Django REST Framework: لبناء الـ API
 djangorestframework==3.15.1
-
-# django-cors-headers: للاتصال بين الفرونت والباك
 django-cors-headers==4.3.1
-
-# Pillow: تم تحديد إصدار مستقر وتثبيت الأدوات المساعدة أعلاه
 Pillow==10.3.0
-
-# django-ckeditor-5: محرر نصوص غني
 django-ckeditor-5==0.2.13
-
-# whitenoise: لخدمة الملفات الثابتة
 whitenoise==6.7.0
-
-# gunicorn: خادم الإنتاج
 gunicorn==22.0.0
