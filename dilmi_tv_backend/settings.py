@@ -7,7 +7,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
-DEBUG = False
+DEBUG = True
 
 # تم تحديث ALLOWED_HOSTS ليتوافق مع رابط موقعك على Render
 ALLOWED_HOSTS = [
