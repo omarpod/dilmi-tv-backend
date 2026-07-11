@@ -21,11 +21,11 @@ SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
 # DEBUG = True مفيد فقط أثناء التطوير (يعرض لك تفاصيل الأخطاء).
 # يجب أن تجعله False عند النشر الفعلي على الإنترنت.
-DEBUG = True
+DEBUG = False
 
 # القائمة البيضاء للنطاقات/العناوين المسموح لها بتشغيل هذا الموقع.
 # أثناء التطوير المحلي نتركها فارغة أو نضع '*' لتسهيل التجربة.
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = ['https://web-production-d72c6.up.railway.app']
 
 # مطلوبة فقط إذا أردت تسجيل الدخول للوحة التحكم /admin/ عبر رابط خارجي
 # (مثل رابط نفق Serveo/ngrok) وليس فقط عبر 127.0.0.1 محلياً.
@@ -34,7 +34,7 @@ ALLOWED_HOSTS = ['*']
 # إذا واجهت خطأ "CSRF verification failed" عند الدخول للوحة التحكم عبر
 # رابط Serveo، أضف رابطك هنا (استبدل الرابط التالي برابطك الفعلي):
 CSRF_TRUSTED_ORIGINS = [
-    '*',
+    'https://web-production-d72c6.up.railway.app',
 ]
 
 # =============================================================================
