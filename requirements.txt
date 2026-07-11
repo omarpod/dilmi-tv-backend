@@ -29,3 +29,6 @@ whitenoise==6.7.0
 
 # gunicorn: خادم WSGI المستخدم فعلياً لتشغيل Django في الإنتاج على Render
 gunicorn==22.0.0
+
+dj-database-url
+psycopg2-binary
