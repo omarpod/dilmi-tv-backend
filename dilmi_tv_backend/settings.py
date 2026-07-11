@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # إعدادات الأمان الأساسية
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
-DEBUG = True
+DEBUG = False
 ALLOWED_HOSTS = ['*']
 
 # هذا السطر هو مفتاح حل مشكلة تسجيل الدخول
