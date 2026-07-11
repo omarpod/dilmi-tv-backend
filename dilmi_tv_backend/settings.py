@@ -11,7 +11,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # إعدادات الأمان
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
-DEBUG = False  # تم ضبطه لـ False للعمل المستقر في الإنتاج
+DEBUG = True  # تم ضبطه لـ False للعمل المستقر في الإنتاج
 ALLOWED_HOSTS = ['*']
 
 # هذا السطر ضروري جداً لتجاوز مشاكل تسجيل الدخول على Render
