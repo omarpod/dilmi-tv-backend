@@ -1,5 +1,5 @@
 """
-settings.py - الإعدادات الكاملة والمستقرة لـ Dilmi TV
+settings.py - الإعدادات الكاملة والمستقرة لـ Dilmi TV (مع إضافة القوالب المفقودة)
 """
 from pathlib import Path
 
@@ -50,6 +50,24 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'dilmi_tv_backend.urls'
+
+# --- هذا القسم المفقود هو سبب الخطأ ---
+TEMPLATES = [
+    {
+        'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        'DIRS': [BASE_DIR / 'templates'],
+        'APP_DIRS': True,
+        'OPTIONS': {
+            'context_processors': [
+                'django.template.context_processors.debug',
+                'django.template.context_processors.request',
+                'django.contrib.auth.context_processors.auth',
+                'django.contrib.messages.context_processors.messages',
+            ],
+        },
+    },
+]
+# ---------------------------------------
 
 DATABASES = {
     'default': {
