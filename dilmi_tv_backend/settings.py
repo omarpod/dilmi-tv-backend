@@ -21,7 +21,7 @@ SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
 # DEBUG = True مفيد فقط أثناء التطوير (يعرض لك تفاصيل الأخطاء).
 # يجب أن تجعله False عند النشر الفعلي على الإنترنت.
-DEBUG = False
+DEBUG = True
 
 # القائمة البيضاء للنطاقات المسموح لها بتشغيل هذا الموقع (نطاق Railway هنا).
 ALLOWED_HOSTS = [
