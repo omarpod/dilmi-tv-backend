@@ -1,0 +1,16 @@
+# render.yaml
+# -----------
+# ملف اختياري: بدل ضبط Build/Start Command يدوياً من لوحة تحكم Render في
+# كل مرة، يمكنك ربط هذا الملف مباشرة (Render يكتشفه تلقائياً إذا وُجد في
+# جذر المستودع عند إنشاء خدمة جديدة عبر "New Blueprint Instance"،
+# أو يمكنك نسخ القيم أدناه يدوياً في لوحة تحكم خدمة موجودة بالفعل).
+services:
+  - type: web
+    name: dilmi-tv-backend
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
+    startCommand: "gunicorn dilmi_tv_backend.wsgi:application"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.0
