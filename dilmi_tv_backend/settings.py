@@ -1,7 +1,7 @@
 """
 settings.py
 -----------
-إعدادات المشروع النهائية للعمل على Render.
+إعدادات المشروع النهائية والمعدلة للعمل على Render مع تنسيق Static.
 """
 
 from pathlib import Path
@@ -9,12 +9,12 @@ import os
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# إعدادات الأمان الأساسية
+# إعدادات الأمان
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
-DEBUG = False
+DEBUG = False  # تم ضبطه لـ False للعمل المستقر في الإنتاج
 ALLOWED_HOSTS = ['*']
 
-# هذا السطر هو مفتاح حل مشكلة تسجيل الدخول
+# هذا السطر ضروري جداً لتجاوز مشاكل تسجيل الدخول على Render
 CSRF_TRUSTED_ORIGINS = [
     'https://dilmi-tv-backend.onrender.com',
     'https://*.serveousercontent.com',
@@ -66,6 +66,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'dilmi_tv_backend.wsgi.application'
 
+# قاعدة البيانات
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -73,21 +74,23 @@ DATABASES = {
     }
 }
 
+# اللغة والمنطقة الزمنية
 LANGUAGE_CODE = 'ar'
 TIME_ZONE = 'Africa/Algiers'
 USE_I18N = True
 USE_TZ = True
 
-# إعدادات الملفات الثابتة (Static)
-STATIC_URL = 'static/'
+# --- إعدادات الملفات الثابتة (معدلة ومضافة كما طلبت) ---
+STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')]
+STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static')] 
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# إعدادات REST Framework
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
@@ -96,6 +99,7 @@ REST_FRAMEWORK = {
     'PAGE_SIZE': 20,
 }
 
+# إعدادات CKEditor 5
 CKEDITOR_5_CONFIGS = {
     'default': {
         'toolbar': [
