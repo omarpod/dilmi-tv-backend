@@ -1,5 +1,5 @@
 """
-settings.py - الإعدادات النهائية والمحدثة للعمل على منصة Render مع قاعدة بيانات خارجية
+settings.py - الإعدادات النهائية والمحدثة للعمل على منصة Render
 """
 import os
 import dj_database_url
@@ -9,7 +9,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
-DEBUG = False # تم ضبطها على False للأمان
+DEBUG = False 
 
 ALLOWED_HOSTS = [
     'dilmi-tv-backend.onrender.com',
@@ -71,14 +71,25 @@ TEMPLATES = [
     },
 ]
 
-# إعداد قاعدة البيانات للعمل مع Neon (PostgreSQL) عبر متغير البيئة
-DATABASES = {
-    'default': dj_database_url.config(
-        default=os.environ.get('DATABASE_URL'),
-        conn_max_age=600,
-        ssl_require=True
-    )
-}
+# --- تعديل ذكي لقاعدة البيانات لتجاوز خطأ البناء ---
+DATABASE_URL = os.environ.get('DATABASE_URL')
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+# --------------------------------------------------
 
 LANGUAGE_CODE = 'ar'
 TIME_ZONE = 'Africa/Algiers'
