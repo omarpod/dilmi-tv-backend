@@ -1,5 +1,5 @@
 """
-settings.py - الإعدادات الكاملة والمستقرة لـ Dilmi TV (مع إضافة القوالب المفقودة)
+settings.py - الإعدادات النهائية والمحدثة للعمل على منصة Render
 """
 from pathlib import Path
 
@@ -9,16 +9,19 @@ SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
 DEBUG = False
 
+# تم تحديث ALLOWED_HOSTS ليتوافق مع رابط موقعك على Render
 ALLOWED_HOSTS = [
+    'dilmi-tv-backend.onrender.com',
     'web-production-d72c6.up.railway.app',
-    '.railway.app',
     'localhost',
     '127.0.0.1',
 ]
 
 CSRF_TRUSTED_ORIGINS = [
+    'https://dilmi-tv-backend.onrender.com',
     'https://web-production-d72c6.up.railway.app',
     'https://*.railway.app',
+    'https://*.onrender.com',
 ]
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
@@ -51,7 +54,6 @@ MIDDLEWARE = [
 
 ROOT_URLCONF = 'dilmi_tv_backend.urls'
 
-# --- هذا القسم المفقود هو سبب الخطأ ---
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
@@ -67,7 +69,6 @@ TEMPLATES = [
         },
     },
 ]
-# ---------------------------------------
 
 DATABASES = {
     'default': {
