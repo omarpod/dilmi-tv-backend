@@ -20,9 +20,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
 # DEBUG = True مفيد فقط أثناء التطوير (يعرض لك تفاصيل الأخطاء).
-# ⚠️ مضبوطة True هنا مؤقتاً وعمداً فقط لتشخيص خطأ "Bad Request (400)"
-# الحالي — أعدها إلى False فوراً بعد نسخ رسالة الخطأ التفصيلية ورؤيتها.
-DEBUG = True
+# يجب أن تجعله False عند النشر الفعلي على الإنترنت.
+DEBUG = False
 
 # القائمة البيضاء للنطاقات المسموح لها بتشغيل هذا الموقع (نطاق Railway هنا).
 ALLOWED_HOSTS = [

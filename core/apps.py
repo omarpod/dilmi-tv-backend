@@ -16,6 +16,12 @@ class CoreConfig(AppConfig):
         from django.contrib import admin
         from core.dashboard import build_dashboard_stats
 
+        # نخبر Django أن يستخدم قالبنا المُسمّى باسم مختلف عمداً بدل
+        # 'admin/index.html' الافتراضي — راجع التعليق التفصيلي أعلى
+        # templates/admin/dilmi_dashboard.html لسبب تسميته هكذا تحديداً
+        # (تفادي مشكلة "التمديد الذاتي" self-extends).
+        admin.site.index_template = 'admin/dilmi_dashboard.html'
+
         original_index = admin.site.index
 
         def index_with_stats(request, extra_context=None):
