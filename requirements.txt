@@ -1,37 +1,14 @@
-# المكتبات الأساسية لمشروع Dilmi TV Backend
-
-# Django: إطار العمل الأساسي لبناء الموقع/لوحة التحكم
 Django==5.0.6
-
-# Django REST Framework: لبناء الـ API الذي يتواصل معه تطبيق الأندرويد
 djangorestframework==3.15.1
-
-# django-cors-headers: يسمح لتطبيق الأندرويد (أو أي جهة خارجية)
-# بالاتصال بالـ API دون أن يمنعه المتصفح/الخادم بسبب سياسة CORS
 django-cors-headers==4.3.1
-
-# Pillow: مطلوبة لحقول الصور (شعارات الفرق، صور الأخبار...)
 Pillow
-
-# django-ckeditor-5: محرر نصوص غني (HTML) لحقل المحتوى في StaticPage
-# (صفحتي "سياسة الخصوصية" و"من نحن")، يسمح بتنسيق النص من لوحة التحكم
-# دون كتابة وسوم HTML يدوياً
 django-ckeditor-5==0.2.13
-
-# django-jazzmin: يمنح لوحة تحكم Django شكلاً احترافياً وحديثاً بالكامل
-# (ثيم داكن مخصص، أيقونات، تنظيم قائمة جانبية) بدل شكل Django الافتراضي
 django-jazzmin==3.0.1
-
-# whitenoise: يسمح لـ Django/Gunicorn بخدمة ملفات CSS/JS الثابتة مباشرة
-# في الإنتاج (بما فيها ملفات تنسيق لوحة تحكم /admin نفسها) دون الحاجة
-# لخادم ويب منفصل مثل Nginx — الحل القياسي على منصات مثل Render/Heroku
 whitenoise==6.7.0
-
-# gunicorn: خادم WSGI المستخدم فعلياً لتشغيل Django في الإنتاج على Render
 gunicorn==22.0.0
-
 dj-database-url
 psycopg2-binary
-
 setuptools
 wheel
+# إضافة مكتبة لضمان استقرار الاتصال بـ database
+django-environ
