@@ -14,6 +14,9 @@ urlpatterns = [
 
     # /api/  -> كل روابط الـ API الخاصة بتطبيق Dilmi TV موجودة في core/urls.py
     path('api/', include('core.urls')),
+
+    # /ckeditor5/  -> روابط رفع الصور داخل محرر النصوص الغني (لحقل content في StaticPage)
+    path('ckeditor5/', include('django_ckeditor_5.urls')),
 ]
 
 # أثناء التطوير فقط: نسمح بعرض الصور المرفوعة (شعارات الفرق مثلاً) مباشرة

@@ -1,54 +1,66 @@
 """
 settings.py
 -----------
-هذا هو "مركز التحكم" في المشروع كله. كل الإعدادات العامة موجودة هنا.
+هذا هو "مركز التحكم" في المشروع كله. كل الإعدادات العامة (قاعدة البيانات،
+التطبيقات المُفعّلة، الأمان، اللغة...) موجودة هنا.
 """
 
-import os # إضافة هذه المكتبة في الأعلى مهمة
 from pathlib import Path
 
-# BASE_DIR: المسار الجذري للمشروع
+# BASE_DIR: المسار الجذري للمشروع (المجلد الذي يحتوي على manage.py)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # =============================================================================
 # إعدادات الأمان
 # =============================================================================
+
+# مفتاح سري يستخدمه Django داخلياً للتشفير. 
+# تحذير: قبل رفع المشروع للإنتاج الحقيقي، غيّر هذا المفتاح واجعله سرياً
+# (لا تضعه في GitHub علناً). يمكن قراءته من متغير بيئة لاحقاً.
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
 
+# DEBUG = True مفيد فقط أثناء التطوير (يعرض لك تفاصيل الأخطاء).
+# يجب أن تجعله False عند النشر الفعلي على الإنترنت.
 DEBUG = True
 
+# القائمة البيضاء للنطاقات/العناوين المسموح لها بتشغيل هذا الموقع.
+# أثناء التطوير المحلي نتركها فارغة أو نضع '*' لتسهيل التجربة.
 ALLOWED_HOSTS = ['*']
 
+# مطلوبة فقط إذا أردت تسجيل الدخول للوحة التحكم /admin/ عبر رابط خارجي
+# (مثل رابط نفق Serveo/ngrok) وليس فقط عبر 127.0.0.1 محلياً.
+# Django يرفض طلبات POST (مثل تسجيل الدخول) القادمة من نطاق غير موجود هنا،
+# حتى لو كان ALLOWED_HOSTS يسمح به، وذلك كحماية إضافية من هجمات CSRF.
+# إذا واجهت خطأ "CSRF verification failed" عند الدخول للوحة التحكم عبر
+# رابط Serveo، أضف رابطك هنا (استبدل الرابط التالي برابطك الفعلي):
 CSRF_TRUSTED_ORIGINS = [
-    'https://d5c7a57daf9b5559-41-200-3-198.serveousercontent.com',
     'https://*.serveousercontent.com',
-    'https://dilmi-tv-backend.onrender.com', # إضافة رابط موقعك الحقيقي
 ]
 
 # =============================================================================
-# التطبيقات المُفعّلة
+# التطبيقات المُفعّلة (Installed Apps)
 # =============================================================================
 INSTALLED_APPS = [
-    'django.contrib.admin',
-    'django.contrib.auth',
+    'django.contrib.admin',        # لوحة تحكم Django الجاهزة
+    'django.contrib.auth',         # نظام المستخدمين وتسجيل الدخول
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
+    'django.contrib.staticfiles',  # لخدمة ملفات CSS/JS/الصور
 
-    'rest_framework',
-    'corsheaders',
+    'rest_framework',              # مكتبة بناء الـ API
+    'corsheaders',                 # للسماح لتطبيق الأندرويد بالاتصال بالـ API
+    'django_ckeditor_5',           # محرر نصوص غني (HTML) لصفحات "من نحن" و"سياسة الخصوصية"
 
-    'core',
+    'core',                        # تطبيقنا الخاص (سننشئه بالخطوات القادمة)
 ]
 
 # =============================================================================
-# الوسائط (Middleware) - تم تعديلها لإضافة WhiteNoise
+# الوسائط (Middleware): طبقات تعالج كل طلب قبل وبعد وصوله للـ views
 # =============================================================================
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',   # يجب أن تكون في الأعلى قدر الإمكان
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware', # تم إضافة WhiteNoise هنا
-    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -57,6 +69,8 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# أثناء التطوير: نسمح لأي مصدر بالاتصال بالـ API (تطبيق الأندرويد على المحاكي مثلاً).
+# عند النشر الحقيقي، استبدل هذا بقائمة محددة من النطاقات المسموحة.
 CORS_ALLOW_ALL_ORIGINS = True
 
 ROOT_URLCONF = 'dilmi_tv_backend.urls'
@@ -80,32 +94,30 @@ TEMPLATES = [
 WSGI_APPLICATION = 'dilmi_tv_backend.wsgi.application'
 
 # =============================================================================
-# قاعدة البيانات
+# قاعدة البيانات: SQLite (ملف واحد بسيط، مناسب جداً للبداية والتعلم)
 # =============================================================================
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': BASE_DIR / 'db.sqlite3',  # سيُنشأ هذا الملف تلقائياً عند migrate
     }
 }
 
 # =============================================================================
 # اللغة والمنطقة الزمنية
 # =============================================================================
-LANGUAGE_CODE = 'ar'
-TIME_ZONE = 'Africa/Algiers'
+LANGUAGE_CODE = 'ar'          # لجعل لوحة تحكم Django الجاهزة تظهر بالعربية
+TIME_ZONE = 'Africa/Algiers'  # يمكنك تغييرها حسب منطقتك
 USE_I18N = True
 USE_TZ = True
 
 # =============================================================================
-# الملفات الثابتة (Static Files) - تم تحديثها
+# الملفات الثابتة والوسائط (صور القنوات، شعارات الفرق...)
 # =============================================================================
 STATIC_URL = 'static/'
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = BASE_DIR / 'media'   # هنا ستُحفظ الصور التي يرفعها المدير
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -113,9 +125,29 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # إعدادات Django REST Framework
 # =============================================================================
 REST_FRAMEWORK = {
+    # بشكل افتراضي، أي شخص يمكنه "القراءة فقط" من الـ API (GET)
+    # بينما الكتابة (إضافة/تعديل) تتم فقط عبر لوحة تحكم /admin
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
+
+# =============================================================================
+# إعدادات محرر النصوص الغني CKEditor 5 (لحقل content في StaticPage)
+# =============================================================================
+# customColorPalette فارغة تعني استخدام الألوان الافتراضية للمحرر.
+CKEDITOR_5_CONFIGS = {
+    'default': {
+        'toolbar': [
+            'heading', '|',
+            'bold', 'italic', 'underline', 'link', '|',
+            'bulletedList', 'numberedList', '|',
+            'blockQuote', 'insertImage', 'mediaEmbed', '|',
+            'undo', 'redo',
+        ],
+    },
+}
+# مسار رفع الصور المُدرجة داخل محتوى المحرر نفسه (مختلف عن MEDIA_ROOT العام)
+CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'

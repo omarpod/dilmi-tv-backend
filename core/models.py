@@ -9,6 +9,7 @@ models.py
 كل حقل (field) هنا = عمود في الجدول.
 """
 from django.db import models
+from django_ckeditor_5.fields import CKEditor5Field
 
 
 class Channel(models.Model):
@@ -187,3 +188,137 @@ class AdSettings(models.Model):
 
     def __str__(self):
         return 'إعدادات AdMob'
+
+
+# =============================================================================
+# النماذج الجديدة: الإحصائيات، الإعدادات العامة، مشتركو الإشعارات، الصفحات الثابتة
+# =============================================================================
+
+class Analytics(models.Model):
+    """
+    سجل زيارات بسيط: كل مرة يفتح فيها أحد التطبيق (أو يزور شاشة معينة)،
+    نسجّل سطراً هنا. هذا يبني "نظام إحصائيات دقيق للزوار" كما طُلب،
+    دون تعقيد إضافة مكتبات تحليلات خارجية.
+
+    ملاحظة تصميم: هذا الجدول يكبر بسرعة مع الاستخدام (سطر لكل زيارة)،
+    لذا يُفضّل لاحقاً أرشفة أو حذف السجلات القديمة دورياً إذا كبر
+    عدد المستخدمين كثيراً (خارج نطاق هذا التحديث الحالي).
+    """
+    ip_address = models.GenericIPAddressField('عنوان IP', null=True, blank=True)
+
+    device = models.CharField(
+        'الجهاز', max_length=150, blank=True,
+        help_text='مثال: Android 14 - Samsung SM-G991B، يرسله التطبيق تلقائياً',
+    )
+
+    # أي شاشة/حدث زاره المستخدم، مفيد لمعرفة أكثر الأقسام استخداماً
+    screen = models.CharField(
+        'الشاشة/الحدث', max_length=100, blank=True,
+        help_text='مثال: home, channel_open, news_detail',
+    )
+
+    timestamp = models.DateTimeField('التوقيت', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'زيارة'
+        verbose_name_plural = 'الإحصائيات (الزوار)'
+        ordering = ['-timestamp']
+
+    def __str__(self):
+        return f'{self.device or "جهاز غير معروف"} - {self.timestamp:%Y-%m-%d %H:%M}'
+
+
+class SiteSettings(models.Model):
+    """
+    الإعدادات العامة للموقع/التطبيق: روابط التواصل الاجتماعي والبريد.
+    مثل AdSettings، هذا الجدول "سجل واحد فقط" (Singleton) لأن التطبيق
+    يحتاج نسخة واحدة فقط من هذه الإعدادات في كل وقت.
+
+    ملاحظة: سمّيناه SiteSettings (وليس Settings فقط) عمداً لتفادي أي
+    تعارض أو التباس مع ملف dilmi_tv_backend/settings.py نفسه.
+    """
+    facebook_url = models.URLField('رابط فيسبوك', blank=True)
+    instagram_url = models.URLField('رابط انستغرام', blank=True)
+    telegram_url = models.URLField('رابط تيليجرام', blank=True)
+    contact_email = models.EmailField('البريد الإلكتروني للتواصل', blank=True)
+
+    updated_at = models.DateTimeField('آخر تحديث', auto_now=True)
+
+    class Meta:
+        verbose_name = 'الإعدادات العامة'
+        verbose_name_plural = 'الإعدادات العامة (تواصل اجتماعي)'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return 'الإعدادات العامة'
+
+
+class NotificationSubscriber(models.Model):
+    """
+    يخزّن رمز جهاز Firebase Cloud Messaging (FCM Token) لكل مستخدم ثبّت
+    التطبيق وسمح بالإشعارات، لنتمكن لاحقاً من إرسال إشعارات Push حقيقية
+    له حتى لو كان التطبيق مغلقاً تماماً (خلافاً للإشعارات المحلية السابقة
+    التي تعمل فقط أثناء تشغيل التطبيق).
+    """
+    fcm_token = models.CharField(
+        'رمز الجهاز (FCM Token)', max_length=255, unique=True,
+        help_text='يُرسله تطبيق Flutter تلقائياً عند أول تشغيل',
+    )
+
+    device_platform = models.CharField(
+        'نظام الجهاز', max_length=20,
+        choices=[('android', 'أندرويد'), ('ios', 'آيفون')],
+        default='android',
+    )
+
+    is_active = models.BooleanField(
+        'نشِط؟', default=True,
+        help_text='يُعطّل تلقائياً إذا رفض الرمز عند محاولة الإرسال (جهاز أُلغي تثبيت التطبيق منه)',
+    )
+
+    subscribed_at = models.DateTimeField('تاريخ الاشتراك', auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'مشترك إشعارات'
+        verbose_name_plural = 'مشتركو الإشعارات (FCM)'
+        ordering = ['-subscribed_at']
+
+    def __str__(self):
+        return f'{self.device_platform} - {self.fcm_token[:20]}...'
+
+
+class StaticPage(models.Model):
+    """
+    صفحات ثابتة مثل "سياسة الخصوصية" و "من نحن". نستخدم PAGE_CHOICES
+    بدل السماح بإنشاء صفحات بأي مفتاح حر، حتى يعرف تطبيق Flutter دائماً
+    بالضبط أي صفحة يطلب عبر مفتاح ثابت متفق عليه مسبقاً (slug).
+
+    مطلب تقني: حقل content يدعم HTML منسّق (وليس نصاً عادياً فقط)، عبر
+    CKEditor5Field من مكتبة django-ckeditor-5، لتتمكن من التنسيق (عناوين،
+    قوائم، روابط، صور...) مباشرة من لوحة التحكم دون كتابة وسوم HTML يدوياً.
+    """
+    PAGE_CHOICES = [
+        ('privacy_policy', 'سياسة الخصوصية'),
+        ('about_us', 'من نحن'),
+    ]
+
+    slug = models.CharField(
+        'الصفحة', max_length=30, choices=PAGE_CHOICES, unique=True,
+    )
+    title = models.CharField('العنوان المعروض', max_length=150)
+
+    # CKEditor5Field يخزّن HTML كامل في قاعدة البيانات (نص عادي في العمود،
+    # لكن لوحة التحكم تعرضه بمحرر نصوص غني بدل textarea عادي)
+    content = CKEditor5Field('المحتوى', config_name='default')
+
+    updated_at = models.DateTimeField('آخر تحديث', auto_now=True)
+
+    class Meta:
+        verbose_name = 'صفحة ثابتة'
+        verbose_name_plural = 'الصفحات الثابتة'
+
+    def __str__(self):
+        return self.title

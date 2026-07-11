@@ -7,7 +7,10 @@ serializers.py
 فكّر فيه كـ "مترجم" بين لغة Python ولغة JSON.
 """
 from rest_framework import serializers
-from .models import Channel, Team, Player, Match, LineupEntry, News, AdSettings
+from .models import (
+    Channel, Team, Player, Match, LineupEntry, News, AdSettings,
+    Analytics, SiteSettings, NotificationSubscriber, StaticPage,
+)
 
 
 class ChannelSerializer(serializers.ModelSerializer):
@@ -75,3 +78,46 @@ class AdSettingsSerializer(serializers.ModelSerializer):
             'banner_ad_unit_id', 'interstitial_ad_unit_id',
             'banner_enabled', 'interstitial_enabled',
         ]
+
+
+class AnalyticsSerializer(serializers.ModelSerializer):
+    """
+    ملاحظة: ip_address ليس من الحقول القابلة للإدخال من التطبيق (read_only)،
+    لأننا نستخرجه نحن من الطلب نفسه في الـ view (أكثر دقة وأماناً من الثقة
+    بما يرسله التطبيق، الذي لا يعرف عنوان IP الحقيقي الذي يراه السيرفر أصلاً
+    خصوصاً خلف شبكات NAT/بروكسي).
+    """
+    class Meta:
+        model = Analytics
+        fields = ['id', 'device', 'screen', 'timestamp']
+
+
+class SiteSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SiteSettings
+        fields = ['facebook_url', 'instagram_url', 'telegram_url', 'contact_email']
+
+
+class NotificationSubscriberSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationSubscriber
+        fields = ['id', 'fcm_token', 'device_platform']
+
+    def create(self, validated_data):
+        # upsert بسيط: إذا كان الرمز موجوداً مسبقاً (تطبيق أُعيد تثبيته
+        # مثلاً)، نُحدّث سجله بدل رفض الطلب بخطأ "duplicate key"
+        token = validated_data['fcm_token']
+        obj, _created = NotificationSubscriber.objects.update_or_create(
+            fcm_token=token,
+            defaults={
+                'device_platform': validated_data.get('device_platform', 'android'),
+                'is_active': True,
+            },
+        )
+        return obj
+
+
+class StaticPageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaticPage
+        fields = ['slug', 'title', 'content', 'updated_at']
