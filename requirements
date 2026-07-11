@@ -1,10 +1,9 @@
---only-binary=:all:
 setuptools>=65.0.0
 wheel
 Django==5.0.6
 djangorestframework==3.15.1
 django-cors-headers==4.3.1
-Pillow==10.3.0
+Pillow>=11.3.0
 django-ckeditor-5==0.2.13
 whitenoise==6.7.0
 gunicorn==22.0.0
