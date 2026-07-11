@@ -1,7 +1,7 @@
 """
 settings.py
 -----------
-هذا هو "مركز التحكم" في المشروع كله.
+هذا هو "مركز التحكم" في المشروع كله (مع تعديل المسار الثابت).
 """
 
 from pathlib import Path
@@ -9,7 +9,7 @@ from pathlib import Path
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # =============================================================================
-# إعدادات الأمان (تم تعديلها للعمل على Railway)
+# إعدادات الأمان
 # =============================================================================
 
 SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
@@ -90,7 +90,8 @@ TIME_ZONE = 'Africa/Algiers'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+# تم التعديل هنا لضمان قراءة التنسيق من الرابط الرئيسي
+STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STORAGES = {
