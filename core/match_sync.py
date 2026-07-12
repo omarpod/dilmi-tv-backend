@@ -32,16 +32,18 @@ logger = logging.getLogger(__name__)
 
 def _first_present(data, *keys, default=None):
     """
-    يُرجع أول قيمة موجودة فعلياً من بين عدة أسماء حقول محتملة لنفس
-    المعنى (مثال: 'homeTeam' أو 'home_team' أو 'home'). هذا يحمينا من
-    AttributeError/KeyError إذا كان اسم الحقل الحقيقي مختلفاً عمّا
-    توقعناه، بدل أن ينهار الكود بالكامل عند أول عنصر غير متوقع.
+    يُرجع أول قيمة موجودة فعلياً وغير فارغة من بين عدة أسماء حقول محتملة
+    لنفس المعنى (مثال: 'homeTeam' أو 'home_team' أو 'home'). هذا يحمينا
+    من AttributeError/KeyError إذا كان اسم الحقل الحقيقي مختلفاً، **وأيضاً**
+    من إنشاء سجلات بقيمة نصية فارغة '' (وليس None فقط) — وهو ما كان يسمح
+    بمرور اسم فارغ فعلياً ويُنتج سجلات League/Team معطوبة في قاعدة البيانات.
     """
     if not isinstance(data, dict):
         return default
     for key in keys:
-        if key in data and data[key] is not None:
-            return data[key]
+        value = data.get(key)
+        if value is not None and value != '':
+            return value
     return default
 
 
