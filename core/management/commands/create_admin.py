@@ -5,15 +5,20 @@ class Command(BaseCommand):
     help = 'Create or update superuser'
 
     def handle(self, *args, **kwargs):
+        # البحث عن المستخدم أو إنشاؤه
         user, created = User.objects.get_or_create(username='dilmitv')
+        
+        # تعيين كلمة المرور بغض النظر إذا كان جديداً أو موجوداً
+        user.set_password('jamaldilmi123')
+        
+        # التأكد من صلاحيات المدير
+        user.is_superuser = True
+        user.is_staff = True
+        
+        # حفظ التغييرات
+        user.save()
+        
         if created:
-            user.set_password('jamaldilmi123')
-            user.is_superuser = True
-            user.is_staff = True
-            user.save()
-            self.stdout.write('Superuser created!')
+            self.stdout.write('Superuser created successfully with jamaldilmi123')
         else:
-            # إذا كان المستخدم موجوداً، سنقوم بتحديث كلمة السر لضمان الدخول
-            user.set_password('jamaldilmi123')
-            user.save()
-            self.stdout.write('Superuser password updated!')
+            self.stdout.write('Superuser password updated to jamaldilmi123')
