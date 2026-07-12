@@ -20,7 +20,7 @@ class CoreConfig(AppConfig):
         # 'admin/index.html' الافتراضي — راجع التعليق التفصيلي أعلى
         # templates/admin/dilmi_dashboard.html لسبب تسميته هكذا تحديداً
         # (تفادي مشكلة "التمديد الذاتي" self-extends).
-        admin.site.index_template = 'admin/dilmi_dashboard.html'
+       # admin.site.index_template = 'admin/dilmi_dashboard.html'
 
         original_index = admin.site.index
 
