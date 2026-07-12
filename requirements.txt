@@ -11,7 +11,7 @@ djangorestframework==3.15.1
 django-cors-headers==4.3.1
 
 # Pillow: مطلوبة لحقول الصور (شعارات الفرق، صور الأخبار...)
---only-binary=:all: Pillow
+Pillow==10.3.0
 
 # django-ckeditor-5: محرر نصوص غني (HTML) لحقل المحتوى في StaticPage
 # (صفحتي "سياسة الخصوصية" و"من نحن")، يسمح بتنسيق النص من لوحة التحكم
@@ -37,4 +37,4 @@ dj-database-url==2.2.0
 # psycopg: المُشغّل (driver) الفعلي الذي يتيح لـ Django التحدث فعلياً
 # مع قاعدة بيانات PostgreSQL/Neon. نسخة [binary] لا تتطلب أدوات ترجمة
 # (compiler) إضافية أثناء التثبيت، وهي الأنسب لبيئات النشر السحابية.
-psycopg2-binary
+psycopg[binary]==3.2.1
