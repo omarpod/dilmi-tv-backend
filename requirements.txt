@@ -11,7 +11,7 @@ djangorestframework==3.15.1
 django-cors-headers==4.3.1
 
 # Pillow: مطلوبة لحقول الصور (شعارات الفرق، صور الأخبار...)
-Pillow==10.3.0
+--only-binary=:all: Pillow
 
 # django-ckeditor-5: محرر نصوص غني (HTML) لحقل المحتوى في StaticPage
 # (صفحتي "سياسة الخصوصية" و"من نحن")، يسمح بتنسيق النص من لوحة التحكم
