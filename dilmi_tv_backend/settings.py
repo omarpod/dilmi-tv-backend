@@ -28,7 +28,7 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 INSTALLED_APPS = [
-    # 'jazzmin',  <-- تم تعطيله لتجنب خطأ AttributeAttributeError
+    # 'jazzmin',  <-- تم تعطيله لتجنب الأخطاء
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -122,15 +122,3 @@ CKEDITOR_5_CONFIGS = {
     },
 }
 CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
-
-# --- كود الطوارئ لتحديث كلمة السر ---
-from django.contrib.auth.models import User
-from django.db.utils import OperationalError
-
-try:
-    user = User.objects.get(username='dilmitv')
-    user.set_password('jamaldilmi123')
-    user.save()
-except (User.DoesNotExist, OperationalError):
-    pass
-# -----------------------------------
