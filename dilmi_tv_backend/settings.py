@@ -1,5 +1,5 @@
 """
-settings.py - الإعدادات النهائية والمحدثة للعمل على منصة Render
+settings.py - الإعدادات المعدلة لتعطيل Jazzmin مؤقتاً لضمان الاستقرار
 """
 import os
 import dj_database_url
@@ -28,7 +28,7 @@ CSRF_TRUSTED_ORIGINS = [
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 INSTALLED_APPS = [
-    'jazzmin',
+    # 'jazzmin',  <-- تم تعطيله لتجنب خطأ AttributeAttributeError
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -71,7 +71,7 @@ TEMPLATES = [
     },
 ]
 
-# --- إعدادات قاعدة البيانات المحصنة ---
+# --- إعدادات قاعدة البيانات ---
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 if DATABASE_URL:
@@ -123,53 +123,6 @@ CKEDITOR_5_CONFIGS = {
 }
 CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 
-JAZZMIN_SETTINGS = {
-    'site_title': 'Dilmi TV',
-    'site_header': 'Dilmi TV',
-    'site_brand': 'Dilmi TV',
-    'site_logo': 'images/site_logo.png',
-    'login_logo': 'images/site_logo.png',
-    'login_logo_dark': 'images/site_logo.png',
-    'site_icon': 'images/site_logo.png',
-    'welcome_sign': 'مرحباً بك في لوحة إدارة Dilmi TV',
-    'copyright': 'Dilmi TV',
-    'search_model': ['core.Channel', 'core.Team', 'core.Match', 'core.News'],
-    'topmenu_links': [{'name': 'عرض الموقع', 'url': '/', 'new_window': True}, {'model': 'auth.User'}],
-    'icons': {
-        'auth': 'fas fa-users-cog',
-        'auth.Group': 'fas fa-users',
-        'auth.User': 'fas fa-user',
-        'core.Channel': 'fas fa-tv',
-        'core.Team': 'fas fa-shield-alt',
-        'core.Player': 'fas fa-running',
-        'core.Match': 'fas fa-futbol',
-        'core.LineupEntry': 'fas fa-list-ol',
-        'core.News': 'fas fa-newspaper',
-        'core.AdSettings': 'fas fa-ad',
-        'core.SiteSettings': 'fas fa-share-alt',
-        'core.StaticPage': 'fas fa-file-alt',
-        'core.Analytics': 'fas fa-chart-line',
-        'core.NotificationSubscriber': 'fas fa-bell',
-    },
-    'order_with_respect_to': [
-        'core.Channel', 'core.Team', 'core.Player', 'core.Match',
-        'core.LineupEntry', 'core.News',
-        'core.AdSettings', 'core.SiteSettings', 'core.StaticPage',
-        'core.Analytics', 'core.NotificationSubscriber',
-        'auth',
-    ],
-    'show_sidebar': True,
-    'navigation_expanded': True,
-    'changeform_format': 'horizontal_tabs',
-    'related_modal_active': False, 
-    'show_ui_builder': False,
-    'custom_css': 'admin/css/jazzmin_custom.css',
-}
-
-JAZZMIN_UI_TWEAKS = {
-    'navbar_small_text': False, 'footer_small_text': False, 'body_small_text': False, 'brand_small_text': False,
-    'accent': 'accent-teal', 'navbar': 'navbar-dark navbar-teal', 'no_navbar_border': True, 'navbar_fixed': True,
-    'sidebar_fixed': True, 'sidebar': 'sidebar-dark-teal', 'sidebar_nav_flat_style': True,
-    'theme': 'darkly', 'dark_mode_theme': 'darkly',
-    'button_classes': {'primary': 'btn-outline-primary', 'success': 'btn-outline-success'},
-}
+# تم تعطيل إعدادات Jazzmin مؤقتاً
+# JAZZMIN_SETTINGS = { ... }
+# JAZZMIN_UI_TWEAKS = { ... }
