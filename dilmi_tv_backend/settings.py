@@ -155,21 +155,35 @@ USE_I18N = True
 USE_TZ = True
 
 # =============================================================================
+# =============================================================================
 # الملفات الثابتة والوسائط
 # =============================================================================
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# CompressedStaticFilesStorage (بدون "Manifest"): تبقي ضغط gzip، لكنها
-# لا تتطلب مطابقة صارمة لكل ملف مُشار إليه، فلا تُسقط الصفحة كاملة بخطأ
-# 500 بسبب ملف واحد ناقص من مكتبة خارجية (مشكلة واجهناها سابقاً مع
-# النسخة "Manifest" الصارمة).
+# StaticFilesStorage البسيطة (بدون Manifest وبدون ضغط Compression):
+#
+# التاريخ الكامل لهذا القرار (توثيق لتفادي تكرار نفس المشكلة لاحقاً):
+# 1) بدأنا بـ CompressedManifestStaticFilesStorage (صارمة جداً) — سببت
+#    خطأ 500 "Missing staticfiles manifest entry" عند أي ملف ناقص.
+# 2) انتقلنا لـ CompressedStaticFilesStorage (بدون Manifest، لكن لا يزال
+#    فيها ضغط gzip) — سببت لاحقاً FileNotFoundError أثناء collectstatic
+#    نفسه (مرحلة البناء) عند محاولة ضغط ملف مُشار إليه في CSS لم يُجمع
+#    فعلياً لأي سبب (icon-hidelink.svg من admin الافتراضي).
+# 3) الحل النهائي هنا: StaticFilesStorage العادية (بدون Manifest وبدون
+#    أي خطوة ضغط/معالجة إضافية بعد النسخ). هذا يُزيل تماماً أي احتمال
+#    فشل أثناء collectstatic بسبب ملف مرجعي واحد.
+#
+# لا نخسر شيئاً عملياً: WHITENOISE_USE_FINDERS=True أدناه يخدم الملفات
+# مباشرة من مجلداتها الأصلية زمن التشغيل أصلاً (وليس من نتاج
+# collectstatic/الضغط) — الضغط كان "تحسين أداء" غير ضروري لحجم مشروع
+# بهذا النطاق، مقابل استقرار البناء الذي لا يقبل المساومة.
 STORAGES = {
     'default': {
         'BACKEND': 'django.core.files.storage.FileSystemStorage',
     },
     'staticfiles': {
-        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+        'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage',
     },
 }
 

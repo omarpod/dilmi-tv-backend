@@ -51,6 +51,23 @@ PYTHON_VERSION = 3.12.7
 | `core/management/commands/create_admin.py` | **جديد** — أمر آمن لإنشاء المدير (راجع القسم 5) |
 | `render.yaml` | أضاف `migrate` و `create_admin` لـ Build Command (آمن الآن مع قاعدة بيانات دائمة) |
 
+## 2.3 (تحديث لاحق) `FileNotFoundError` أثناء `collectstatic` نفسه
+
+بعد إضافة Cloudinary، ظهر خطأ بناء جديد:
+```
+FileNotFoundError: .../staticfiles/admin/img/icon-hidelink.svg
+```
+هذا حدث أثناء خطوة **ضغط الملفات (gzip)** التي كانت تقوم بها
+`CompressedStaticFilesStorage` تلقائياً ضمن `collectstatic` — وهي خطوة
+"تحسين أداء" إضافية غير ضرورية لحجم هذا المشروع.
+
+**القرار النهائي:** التحول لـ `django.contrib.staticfiles.storage.StaticFilesStorage`
+البسيطة (بدون Manifest، بدون ضغط، بدون أي معالجة إضافية بعد النسخ).
+هذا يُزيل نهائياً أي احتمال لفشل `collectstatic` بسبب ملف مرجعي واحد،
+دون أي خسارة عملية — لأن `WHITENOISE_USE_FINDERS=True` يخدم الملفات
+مباشرة من مجلداتها الأصلية زمن التشغيل أصلاً، بمعزل تام عن نتاج
+`collectstatic`.
+
 ## 3. كيف نبني "Admin احترافي" دون الوقوع في نفس الأخطاء (دليل عام)
 
 هذا المبدأ ينطبق على أي تخصيص مستقبلي للوحة التحكم:
