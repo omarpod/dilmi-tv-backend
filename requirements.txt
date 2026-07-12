@@ -41,4 +41,4 @@ dj-database-url==2.2.0
 # psycopg: المُشغّل (driver) الفعلي الذي يتيح لـ Django التحدث فعلياً
 # مع قاعدة بيانات PostgreSQL/Neon. نسخة [binary] لا تتطلب أدوات ترجمة
 # (compiler) إضافية أثناء التثبيت، وهي الأنسب لبيئات النشر السحابية.
-psycopg[binary]==3.2.1
+psycopg[binary]==3.2.10
