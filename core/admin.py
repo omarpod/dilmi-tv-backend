@@ -6,9 +6,15 @@ admin.py
 """
 from django.contrib import admin
 from .models import (
-    Channel, Team, Player, Match, LineupEntry, News, AdSettings,
+    League, Channel, Team, Player, Match, MatchEvent, LineupEntry, News, AdSettings,
     Analytics, SiteSettings, NotificationSubscriber, StaticPage,
 )
+
+
+@admin.register(League)
+class LeagueAdmin(admin.ModelAdmin):
+    list_display = ('name', 'country', 'external_id')
+    search_fields = ('name',)
 
 
 @admin.register(Channel)
@@ -35,9 +41,14 @@ class TeamAdmin(admin.ModelAdmin):
 
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
-    list_display = ('name', 'team', 'shirt_number', 'position')
+    list_display = ('name', 'team', 'shirt_number', 'position', 'has_photo')
     list_filter = ('team', 'position')
     search_fields = ('name',)
+
+    def has_photo(self, obj):
+        return bool(obj.photo)
+    has_photo.short_description = 'له صورة؟'
+    has_photo.boolean = True
 
 
 class LineupInline(admin.TabularInline):
@@ -46,12 +57,18 @@ class LineupInline(admin.TabularInline):
     extra = 1
 
 
+class MatchEventInline(admin.TabularInline):
+    """يسمح بإدخال أحداث المباراة (أهداف، بطاقات) مباشرة من صفحة المباراة."""
+    model = MatchEvent
+    extra = 1
+
+
 @admin.register(Match)
 class MatchAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'competition', 'status', 'home_score', 'away_score', 'channel')
-    list_filter = ('status', 'competition')
+    list_display = ('__str__', 'competition_display', 'status', 'home_score', 'away_score', 'elapsed_minutes', 'channel')
+    list_filter = ('status', 'league')
     search_fields = ('home_team__name', 'away_team__name')
-    inlines = [LineupInline]
+    inlines = [LineupInline, MatchEventInline]
 
 
 @admin.register(News)

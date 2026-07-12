@@ -65,7 +65,12 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+
+    # cloudinary_storage يجب أن يكون قبل django.contrib.staticfiles مباشرة
+    # (شرط موثَّق من المكتبة نفسها) حتى يعمل تخزين الصور الدائم بشكل صحيح
+    'cloudinary_storage',
     'django.contrib.staticfiles',  # لخدمة ملفات CSS/JS/الصور
+    'cloudinary',
 
     'rest_framework',              # مكتبة بناء الـ API
     'corsheaders',                 # للسماح لتطبيق الأندرويد بالاتصال بالـ API
@@ -176,6 +181,40 @@ WHITENOISE_USE_FINDERS = True
 
 MEDIA_URL = '/media/'
 MEDIA_ROOT = BASE_DIR / 'media'
+
+# =============================================================================
+# Cloudinary: CDN مجاني ودائم لصور القنوات/الفرق/اللاعبين/الأخبار
+# =============================================================================
+# لماذا هذا مهم: على Render (الخطة المجانية)، أي صورة تُرفع من لوحة
+# التحكم عبر MEDIA_ROOT العادي **تُحذف تلقائياً عند كل نشر جديد أو إعادة
+# تشغيل** (تخزين مؤقت/غير دائم) — هذا كان السبب الحقيقي لمشكلة "روابط
+# الصور المكسورة" التي ذكرتها. Cloudinary يخزّن الصور خارج Render نفسه
+# بشكل دائم، مع رابط CDN سريع لا ينكسر أبداً بغض النظر عن عدد مرات النشر.
+#
+# == كيف تحصل على بيانات اعتماد Cloudinary (مجاني) ==
+# 1) أنشئ حساباً مجانياً على https://cloudinary.com
+# 2) من لوحة التحكم الرئيسية (Dashboard)، انسخ:
+#    Cloud Name، API Key، API Secret
+# 3) أضفها كمتغيرات بيئة في Render:
+#    CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+#
+# رجوع تلقائي آمن (Fallback): إذا لم تُضبط هذه المتغيرات (مثل التطوير
+# المحلي قبل إنشاء حساب Cloudinary)، يبقى المشروع يعمل بالتخزين المحلي
+# العادي دون أي خطأ — بنفس فلسفة DATABASE_URL أعلاه بالضبط.
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
+}
+
+_cloudinary_configured = bool(
+    CLOUDINARY_STORAGE['CLOUD_NAME']
+    and CLOUDINARY_STORAGE['API_KEY']
+    and CLOUDINARY_STORAGE['API_SECRET']
+)
+
+if _cloudinary_configured:
+    STORAGES['default'] = {'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage'}
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
