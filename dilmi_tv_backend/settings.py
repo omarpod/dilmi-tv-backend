@@ -1,50 +1,86 @@
 """
-settings.py - الإعدادات النهائية والمحدثة للعمل على منصة Render
+settings.py
+-----------
+مركز التحكم في المشروع كله. أُعيدت هيكلته بالكامل لضمان الاستقرار على
+Render مع قاعدة بيانات Neon (PostgreSQL)، ولوحة تحكم Django 5 الافتراضية
+مُخصَّصة عبر متغيرات CSS الرسمية (بدون أي مكتبة طرف ثالث لتصميم اللوحة).
 """
 import os
-import dj_database_url
 from pathlib import Path
+
+import dj_database_url
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = 'django-insecure-REPLACE-THIS-KEY-BEFORE-PRODUCTION-1234567890'
+# =============================================================================
+# إعدادات الأمان
+# =============================================================================
 
-DEBUG = True 
+# SECRET_KEY يُقرأ من متغير بيئة في الإنتاج (لا يظهر أبداً في الكود
+# المرفوع على GitHub). القيمة الثابتة هنا احتياطية للتطوير المحلي فقط.
+SECRET_KEY = os.environ.get(
+    'SECRET_KEY',
+    'django-insecure-REPLACE-THIS-KEY-FOR-LOCAL-DEV-ONLY-1234567890',
+)
 
-ALLOWED_HOSTS = [
-    'dilmi-tv-backend.onrender.com',
-    'web-production-d72c6.up.railway.app',
-    'localhost',
-    '127.0.0.1',
-]
+# DEBUG يُقرأ من متغير بيئة أيضاً؛ القيمة الافتراضية False (آمنة) إن لم
+# يُحدَّد المتغير إطلاقاً، حتى لا يبقى DEBUG=True بالخطأ في الإنتاج.
+DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-CSRF_TRUSTED_ORIGINS = [
-    'https://dilmi-tv-backend.onrender.com',
-    'https://web-production-d72c6.up.railway.app',
-    'https://*.railway.app',
-    'https://*.onrender.com',
-]
+# Render يوفّر هذا المتغير تلقائياً بعنوان نطاق خدمتك الحقيقي — نبنى
+# ALLOWED_HOSTS و CSRF_TRUSTED_ORIGINS منه ديناميكياً، فلا حاجة لتعديل
+# هذا الملف يدوياً في كل مرة يتغيّر فيها النطاق أو تنتقل بين منصات.
+RENDER_EXTERNAL_HOSTNAME = os.environ.get('RENDER_EXTERNAL_HOSTNAME')
 
+ALLOWED_HOSTS = ['localhost', '127.0.0.1']
+CSRF_TRUSTED_ORIGINS = []
+
+if RENDER_EXTERNAL_HOSTNAME:
+    ALLOWED_HOSTS.append(RENDER_EXTERNAL_HOSTNAME)
+    CSRF_TRUSTED_ORIGINS.append(f'https://{RENDER_EXTERNAL_HOSTNAME}')
+
+# دعم إضافي لأي نطاقات إضافية (مثل نطاق مخصص لاحقاً)، مفصولة بفاصلة،
+# عبر متغير بيئة اختياري ADDITIONAL_ALLOWED_HOSTS، مثال:
+#   ADDITIONAL_ALLOWED_HOSTS=dilmi-tv.com,www.dilmi-tv.com
+_extra_hosts = os.environ.get('ADDITIONAL_ALLOWED_HOSTS', '')
+if _extra_hosts:
+    for _host in _extra_hosts.split(','):
+        _host = _host.strip()
+        if _host:
+            ALLOWED_HOSTS.append(_host)
+            CSRF_TRUSTED_ORIGINS.append(f'https://{_host}')
+
+# SECURE_PROXY_SSL_HEADER: ضرورية خلف بروكسي Render (الاتصال الحقيقي مع
+# المتصفح https، لكن الاتصال الداخلي بين بروكسي Render والتطبيق http).
+# ملاحظة: تعمّدنا عدم إضافة USE_X_FORWARDED_HOST — تسبب أخطاء 400 غير
+# متوقعة على بعض المنصات إذا لم تُرسَل الترويسة بالضبط كما يتوقعها Django.
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# =============================================================================
+# التطبيقات المُفعّلة (Installed Apps)
+# =============================================================================
 INSTALLED_APPS = [
-    # 'jazzmin',  <-- تم تعطيله لتجنب الأخطاء
-    'django.contrib.admin',
-    'django.contrib.auth',
+    'django.contrib.admin',        # لوحة تحكم Django الجاهزة (ثيمها الأصلي، مُخصَّص عبر CSS فقط)
+    'django.contrib.auth',         # نظام المستخدمين وتسجيل الدخول
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
-    'django.contrib.staticfiles',
-    'rest_framework',
-    'corsheaders',
-    'django_ckeditor_5',
-    'core',
+    'django.contrib.staticfiles',  # لخدمة ملفات CSS/JS/الصور
+
+    'rest_framework',              # مكتبة بناء الـ API
+    'corsheaders',                 # للسماح لتطبيق الأندرويد بالاتصال بالـ API
+    'django_ckeditor_5',           # محرر نصوص غني (HTML) لصفحات "من نحن" و"سياسة الخصوصية"
+
+    'core',                        # تطبيقنا الخاص
 ]
 
+# =============================================================================
+# الوسائط (Middleware)
+# =============================================================================
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
-    'whitenoise.middleware.WhiteNoiseMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',   # خدمة الملفات الثابتة في الإنتاج
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -53,11 +89,17 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+# أثناء التطوير: نسمح لأي مصدر بالاتصال بالـ API (تطبيق الأندرويد على المحاكي مثلاً).
+CORS_ALLOW_ALL_ORIGINS = True
+
 ROOT_URLCONF = 'dilmi_tv_backend.urls'
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
+        # BASE_DIR/templates: يسمح بتخصيص قوالب Django (مثل
+        # admin/base_site.html لإضافة الشعار وملف CSS المخصص عبر نقطة
+        # التمديد الرسمية والموثَّقة، دون تعديل ملفات Django نفسها).
         'DIRS': [BASE_DIR / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -71,38 +113,57 @@ TEMPLATES = [
     },
 ]
 
-# --- إعدادات قاعدة البيانات ---
-DATABASE_URL = os.environ.get('DATABASE_URL')
+WSGI_APPLICATION = 'dilmi_tv_backend.wsgi.application'
 
-if DATABASE_URL:
-    DATABASES = {
-        'default': dj_database_url.config(
-            default=DATABASE_URL,
-            conn_max_age=600,
-            ssl_require=True
-        )
-    }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': BASE_DIR / 'db.sqlite3',
-        }
-    }
+# =============================================================================
+# قاعدة البيانات: Neon (PostgreSQL) في الإنتاج، SQLite محلياً كبديل تلقائي
+# =============================================================================
+# dj_database_url.config() يقرأ متغير البيئة DATABASE_URL (الذي يوفّره
+# Render/Neon تلقائياً بصيغة postgres://user:pass@host:port/dbname)
+# ويحوّله لإعدادات DATABASES التي يفهمها Django مباشرة.
+#
+# إذا لم يكن هذا المتغير موجوداً إطلاقاً (مثال: أثناء التطوير على جهازك
+# الشخصي بدون اتصال بـ Neon)، نستخدم SQLite محلياً تلقائياً كبديل، حتى
+# يستمر عمل المشروع محلياً دون أي إعداد إضافي.
+DATABASES = {
+    'default': dj_database_url.config(
+        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+        conn_max_age=600,        # يُبقي اتصال قاعدة البيانات مفتوحاً لمدة 10 دقائق (أداء أفضل)
+        ssl_require=bool(os.environ.get('DATABASE_URL')),  # Neon يتطلب SSL، SQLite المحلية لا تحتاجه
+    )
+}
 
-LANGUAGE_CODE = 'ar'
+# =============================================================================
+# اللغة والمنطقة الزمنية
+# =============================================================================
+LANGUAGE_CODE = 'ar'          # لوحة تحكم Django بالعربية بالكامل (ترجمة رسمية من Django نفسه)
 TIME_ZONE = 'Africa/Algiers'
 USE_I18N = True
 USE_TZ = True
 
+# =============================================================================
+# الملفات الثابتة والوسائط
+# =============================================================================
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# CompressedStaticFilesStorage (بدون "Manifest"): تبقي ضغط gzip، لكنها
+# لا تتطلب مطابقة صارمة لكل ملف مُشار إليه، فلا تُسقط الصفحة كاملة بخطأ
+# 500 بسبب ملف واحد ناقص من مكتبة خارجية (مشكلة واجهناها سابقاً مع
+# النسخة "Manifest" الصارمة).
 STORAGES = {
-    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-    'staticfiles': {'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage'},
+    'default': {
+        'BACKEND': 'django.core.files.storage.FileSystemStorage',
+    },
+    'staticfiles': {
+        'BACKEND': 'whitenoise.storage.CompressedStaticFilesStorage',
+    },
 }
+
 WHITENOISE_MANIFEST_STRICT = False
+
+# يخدم الملفات الثابتة مباشرة من مجلداتها الأصلية داخل كل مكتبة، دون أي
+# اعتماد على نجاح أمر collectstatic أثناء البناء — يضمن عمل CSS دائماً.
 WHITENOISE_USE_FINDERS = True
 
 MEDIA_URL = '/media/'
@@ -110,15 +171,41 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+# =============================================================================
+# إعدادات Django REST Framework
+# =============================================================================
 REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASSES': ['rest_framework.permissions.AllowAny'],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.AllowAny',
+    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
 
+# =============================================================================
+# إعدادات محرر النصوص الغني CKEditor 5
+# =============================================================================
 CKEDITOR_5_CONFIGS = {
     'default': {
-        'toolbar': ['heading', '|', 'bold', 'italic', 'underline', 'link', '|', 'bulletedList', 'numberedList', '|', 'blockQuote', 'insertImage', 'mediaEmbed', '|', 'undo', 'redo'],
+        'toolbar': [
+            'heading', '|',
+            'bold', 'italic', 'underline', 'link', '|',
+            'bulletedList', 'numberedList', '|',
+            'blockQuote', 'insertImage', 'mediaEmbed', '|',
+            'undo', 'redo',
+        ],
     },
 }
 CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
+
+# =============================================================================
+# تخصيص هوية لوحة التحكم (بدون أي مكتبة خارجية)
+# =============================================================================
+# التخصيص البصري (الألوان، الشعار) يتم عبر نقطتَي تمديد رسميتين موثَّقتين
+# من Django نفسه، بدون أي مكتبة إضافية:
+#   templates/admin/base_site.html         ← الشعار وربط ملف CSS
+#   core/static/admin/css/admin_custom.css  ← الألوان عبر متغيرات CSS
+#   الرسمية التي يوفرها ثيم Django 5 الافتراضي نفسه (--primary, --header-bg...)
+ADMIN_SITE_HEADER = 'Dilmi TV'
+ADMIN_SITE_TITLE = 'Dilmi TV'
+ADMIN_INDEX_TITLE = 'إدارة الموقع'

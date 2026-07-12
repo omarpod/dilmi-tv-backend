@@ -1,16 +1,38 @@
 # render.yaml
 # -----------
 # ملف اختياري: بدل ضبط Build/Start Command يدوياً من لوحة تحكم Render في
-# كل مرة، يمكنك ربط هذا الملف مباشرة (Render يكتشفه تلقائياً إذا وُجد في
-# جذر المستودع عند إنشاء خدمة جديدة عبر "New Blueprint Instance"،
-# أو يمكنك نسخ القيم أدناه يدوياً في لوحة تحكم خدمة موجودة بالفعل).
+# كل مرة، يمكنك ربط هذا الملف مباشرة (Render يكتشفه تلقائياً عند إنشاء
+# خدمة جديدة عبر "New Blueprint Instance"، أو انسخ القيم يدوياً في لوحة
+# تحكم خدمة موجودة بالفعل).
+#
+# ملاحظة مهمة بعد الانتقال لـ Neon (PostgreSQL): بما أن قاعدة البيانات
+# أصبحت خارجية ودائمة (وليست ملف SQLite مؤقتاً يُعاد إنشاؤه كل نشر)،
+# أصبح تشغيل migrate و create_admin ضمن Build Command آمناً ومنطقياً
+# الآن (كلاهما "idempotent" — لا يكرران أي شيء أو يفشلان لو أُعيد
+# تشغيلهما على بيانات موجودة بالفعل).
 services:
   - type: web
     name: dilmi-tv-backend
     runtime: python
     plan: free
-    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput"
+    buildCommand: >-
+      pip install -r requirements.txt &&
+      python manage.py collectstatic --noinput &&
+      python manage.py migrate &&
+      python manage.py create_admin
     startCommand: "gunicorn dilmi_tv_backend.wsgi:application"
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.0
+      # اضبط هذه القيم من لوحة تحكم Render (Environment) وليس هنا —
+      # sync: false يمنع Render من محاولة قراءة قيمة فعلية من هذا الملف
+      - key: SECRET_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: DJANGO_SUPERUSER_USERNAME
+        sync: false
+      - key: DJANGO_SUPERUSER_EMAIL
+        sync: false
+      - key: DJANGO_SUPERUSER_PASSWORD
+        sync: false
