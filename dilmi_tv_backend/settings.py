@@ -1,5 +1,5 @@
 """
-settings.py - الإعدادات المعدلة لتعطيل Jazzmin مؤقتاً لضمان الاستقرار
+settings.py - الإعدادات النهائية والمحدثة للعمل على منصة Render
 """
 import os
 import dj_database_url
@@ -123,6 +123,14 @@ CKEDITOR_5_CONFIGS = {
 }
 CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 
-# تم تعطيل إعدادات Jazzmin مؤقتاً
-# JAZZMIN_SETTINGS = { ... }
-# JAZZMIN_UI_TWEAKS = { ... }
+# --- كود الطوارئ لتحديث كلمة السر ---
+from django.contrib.auth.models import User
+from django.db.utils import OperationalError
+
+try:
+    user = User.objects.get(username='dilmitv')
+    user.set_password('jamaldilmi123')
+    user.save()
+except (User.DoesNotExist, OperationalError):
+    pass
+# -----------------------------------
