@@ -45,11 +45,46 @@ class Channel(models.Model):
         return self.name
 
 
+class League(models.Model):
+    """
+    البطولة/الدوري (مثل: الدوري الإنجليزي، دوري أبطال أوروبا). فصلناها
+    عن Match كنموذج مستقل (بدل نص حر CharField كما كانت سابقاً) لتصبح
+    قاعدة البيانات "مُطبَّعة" (Normalized) بالمعنى الاحترافي: كل بطولة
+    لها شعار وسجل واحد، بدل تكرار نصها في كل مباراة.
+
+    external_id: معرّف البطولة في API-Football (أو أي مصدر بيانات خارجي
+    مستقبلاً). هذا هو "مفتاح الربط" الذي تعتمد عليه المزامنة التلقائية
+    لمعرفة "هذه البطولة القادمة من الـ API تقابل أي سجل عندي محلياً؟"
+    بدل إنشاء سجل مكرر في كل مرة تُشغَّل المزامنة.
+    """
+    name = models.CharField('اسم البطولة', max_length=150)
+    logo = models.ImageField('شعار البطولة', upload_to='leagues/logos/', blank=True, null=True)
+    country = models.CharField('الدولة', max_length=100, blank=True)
+
+    external_id = models.CharField(
+        'المعرّف الخارجي (API-Football)', max_length=50, blank=True, null=True, unique=True,
+        help_text='يُملأ تلقائياً عند المزامنة، اتركه فارغاً للبطولات المُدخَلة يدوياً',
+    )
+
+    class Meta:
+        verbose_name = 'بطولة'
+        verbose_name_plural = 'البطولات'
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
 class Team(models.Model):
     """جدول الفرق الرياضية."""
     name = models.CharField('اسم الفريق', max_length=100)
     logo = models.ImageField('شعار الفريق', upload_to='teams/logos/', blank=True, null=True)
     country = models.CharField('الدولة', max_length=100, blank=True)
+
+    external_id = models.CharField(
+        'المعرّف الخارجي (API-Football)', max_length=50, blank=True, null=True, unique=True,
+        help_text='يُملأ تلقائياً عند المزامنة، اتركه فارغاً للفرق المُدخَلة يدوياً',
+    )
 
     class Meta:
         verbose_name = 'فريق'
@@ -67,6 +102,12 @@ class Player(models.Model):
     """
     team = models.ForeignKey(Team, on_delete=models.CASCADE, related_name='players', verbose_name='الفريق')
     name = models.CharField('اسم اللاعب', max_length=100)
+
+    # صورة اللاعب: كانت مفقودة في التصميم السابق (أحد أسباب "عدم اكتمال
+    # المحتوى" الذي ذكرته). الآن تُخزَّن عبر Cloudinary تلقائياً
+    # (راجع settings.py) لضمان رابط دائم لا ينكسر أبداً.
+    photo = models.ImageField('صورة اللاعب', upload_to='players/photos/', blank=True, null=True)
+
     shirt_number = models.PositiveIntegerField('رقم القميص', default=0)
     position = models.CharField(
         'المركز', max_length=20,
@@ -75,6 +116,11 @@ class Player(models.Model):
             ('MF', 'وسط'), ('FW', 'مهاجم'),
         ],
         default='MF',
+    )
+
+    external_id = models.CharField(
+        'المعرّف الخارجي (API-Football)', max_length=50, blank=True, null=True, unique=True,
+        help_text='يُملأ تلقائياً عند المزامنة، اتركه فارغاً للاعبين المُدخَلين يدوياً',
     )
 
     class Meta:
@@ -104,7 +150,18 @@ class Match(models.Model):
         related_name='matches', verbose_name='قناة البث',
     )
 
-    competition = models.CharField('البطولة/الدوري', max_length=150, blank=True)
+    # league: الحقل الجديد المُطبَّع (Normalized). أبقينا حقل competition
+    # النصي القديم كـ "احتياطي عرض" فقط (fallback) إذا لم تُربط المباراة
+    # ببطولة فعلية بعد — لا حاجة لحذفه أو ترحيل بيانات قسراً.
+    league = models.ForeignKey(
+        League, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='matches', verbose_name='البطولة',
+    )
+    competition = models.CharField(
+        'البطولة/الدوري (نص احتياطي)', max_length=150, blank=True,
+        help_text='يُستخدم فقط إذا لم يُحدَّد حقل "البطولة" أعلاه',
+    )
+
     match_datetime = models.DateTimeField('موعد المباراة')
 
     status = models.CharField('حالة المباراة', max_length=10, choices=STATUS_CHOICES, default='upcoming')
@@ -112,13 +169,66 @@ class Match(models.Model):
     home_score = models.PositiveIntegerField('أهداف الفريق المضيف', default=0)
     away_score = models.PositiveIntegerField('أهداف الفريق الضيف', default=0)
 
+    # الوقت المنقضي في المباراة الحية (بالدقائق)، يُحدَّث عند كل مزامنة.
+    # يسمح لتطبيق Flutter بعرض "45'" مثلاً بدل "مباشر الآن" فقط.
+    elapsed_minutes = models.PositiveIntegerField('الدقيقة الحالية', default=0, blank=True)
+
+    external_id = models.CharField(
+        'المعرّف الخارجي (API-Football)', max_length=50, blank=True, null=True, unique=True,
+        help_text='يُملأ تلقائياً عند المزامنة، اتركه فارغاً للمباريات المُدخَلة يدوياً',
+    )
+
     class Meta:
         verbose_name = 'مباراة'
         verbose_name_plural = 'المباريات'
         ordering = ['match_datetime']
 
+    @property
+    def competition_display(self):
+        """الاسم المعروض فعلياً: البطولة المُطبَّعة إن وُجدت، وإلا النص الاحتياطي."""
+        return self.league.name if self.league else self.competition
+
     def __str__(self):
         return f'{self.home_team} vs {self.away_team} - {self.match_datetime:%Y-%m-%d %H:%M}'
+
+
+class MatchEvent(models.Model):
+    """
+    أحداث المباراة: الأهداف، البطاقات الصفراء/الحمراء، والتبديلات —
+    بالضبط كما في مخطط "MATCHEVENT" الذي أرسلته. كل حدث مرتبط بدقيقة
+    محدَّدة ولاعب/فريق، ليعرض تطبيق Flutter خط زمن حي للمباراة
+    (Match Timeline) بدل النتيجة النهائية فقط.
+    """
+    EVENT_TYPE_CHOICES = [
+        ('goal', 'هدف'),
+        ('yellow_card', 'بطاقة صفراء'),
+        ('red_card', 'بطاقة حمراء'),
+        ('substitution', 'تبديل'),
+    ]
+
+    match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name='events', verbose_name='المباراة')
+    team = models.ForeignKey(Team, on_delete=models.CASCADE, verbose_name='الفريق')
+    player = models.ForeignKey(
+        Player, on_delete=models.SET_NULL, null=True, blank=True,
+        verbose_name='اللاعب',
+    )
+
+    minute = models.PositiveIntegerField('الدقيقة')
+    event_type = models.CharField('نوع الحدث', max_length=20, choices=EVENT_TYPE_CHOICES)
+    description = models.CharField('تفاصيل إضافية', max_length=200, blank=True)
+
+    external_id = models.CharField(
+        'المعرّف الخارجي (API-Football)', max_length=50, blank=True, null=True,
+        help_text='يمنع تكرار نفس الحدث عند إعادة المزامنة',
+    )
+
+    class Meta:
+        verbose_name = 'حدث مباراة'
+        verbose_name_plural = 'أحداث المباريات'
+        ordering = ['match', 'minute']
+
+    def __str__(self):
+        return f"{self.get_event_type_display()} - {self.player or self.team} ({self.minute}')"
 
 
 class LineupEntry(models.Model):
@@ -133,7 +243,8 @@ class LineupEntry(models.Model):
     class Meta:
         verbose_name = 'عنصر تشكيلة'
         verbose_name_plural = 'التشكيلات'
-        # يمنع تكرار نفس اللاعب مرتين في نفس المباراة
+        # يمنع تكرار نفس اللاعب مرتين في نفس المباراة (يخدم أيضاً كحماية
+        # طبيعية من التكرار عند إعادة تشغيل المزامنة التلقائية لاحقاً)
         unique_together = ('match', 'player')
 
     def __str__(self):
