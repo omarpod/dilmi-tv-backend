@@ -1,22 +1,12 @@
 {% extends "admin/base.html" %}
 {% load static %}
 
-{#
-    base_site.html
-    --------------
-    هذه هي نقطة التمديد **الرسمية والموثَّقة من Django نفسه** لتخصيص
-    هوية لوحة التحكم (راجع توثيق Django: "Overriding admin templates" —
-    templates/admin/base_site.html هو المثال الرسمي المذكور تحديداً).
-
-    خلافاً لتخصيص admin/index.html (الذي يحمل خطر "المد الذاتي" كما
-    واجهنا سابقاً)، هذا الملف **يستبدل** admin/base_site.html الافتراضي
-    بالكامل (لا يُمدِّده)، ويُمدِّد بدلاً منه admin/base.html — قالب
-    Django الأساسي الحقيقي دائماً، بلا أي التباس أو خطر تمديد ذاتي.
-
-    كل صفحات لوحة التحكم (index، change_form، changelist...) تستخدم
-    هذا الملف تلقائياً لأنه الاسم القياسي المعروف لـ Django، فتخصيصنا
-    هنا (الشعار + ملف CSS) يظهر في **كل** صفحات اللوحة دفعة واحدة.
-#}
+<!--
+    base_site.html: نقطة التمديد الرسمية من Django لتخصيص الشعار وربط
+    CSS مخصص (راجع ADMIN_REBUILD_NOTES.md للشرح الكامل). يُمدِّد
+    admin/base.html مباشرة (وليس admin/index.html)، فلا يوجد أي خطر
+    "تمديد ذاتي" هنا إطلاقاً.
+-->
 
 {% block title %}{{ title }} | Dilmi TV{% endblock %}
 
