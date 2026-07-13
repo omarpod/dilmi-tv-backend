@@ -289,6 +289,14 @@ class News(models.Model):
     content = models.TextField('المحتوى')
     image = models.ImageField('صورة الخبر', upload_to='news/images/', blank=True, null=True)
 
+    # رابط المصدر الأصلي (يُملأ تلقائياً عند السحب من RSS، ويُستخدم
+    # كمفتاح فريد لمنع تكرار نفس الخبر عند إعادة تشغيل المزامنة — تماماً
+    # بنفس مبدأ external_id في League/Team/Match). يبقى فارغاً بأمان
+    # للأخبار التي تكتبها يدوياً من /admin/.
+    source_url = models.URLField(
+        'رابط المصدر', max_length=500, blank=True, null=True, unique=True,
+    )
+
     # اختياري: ربط الخبر بمباراة معينة (مثل "ملخص مباراة الأمس")
     related_match = models.ForeignKey(
         Match, on_delete=models.SET_NULL, null=True, blank=True,

@@ -90,7 +90,7 @@ class MatchSerializer(serializers.ModelSerializer):
 class NewsSerializer(serializers.ModelSerializer):
     class Meta:
         model = News
-        fields = ['id', 'title', 'content', 'image', 'related_match', 'published_at']
+        fields = ['id', 'title', 'content', 'image', 'source_url', 'related_match', 'published_at']
 
 
 class AdSettingsSerializer(serializers.ModelSerializer):

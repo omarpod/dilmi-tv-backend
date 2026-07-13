@@ -304,3 +304,16 @@ CKEDITOR_5_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 ADMIN_SITE_HEADER = 'Dilmi TV'
 ADMIN_SITE_TITLE = 'Dilmi TV'
 ADMIN_INDEX_TITLE = 'إدارة الموقع'
+
+# =============================================================================
+# مصدر الأخبار (RSS) — بديل مجاني عن API أخبار مدفوع
+# =============================================================================
+# مزود المباريات الحالي (Free API Live Football Data) لا يوفّر أخباراً
+# إطلاقاً (تحقّقنا عبر probe_api_endpoints). القيمة الافتراضية هنا هي
+# خلاصة رياضة BBC عربي (مستقرة وموثوقة). **غيّرها بسهولة** عبر متغير
+# بيئة RSS_NEWS_FEED_URL على Render دون لمس أي كود، إذا أردت مصدراً آخر
+# (مثال: خلاصة موقعك الرياضي العربي المفضّل).
+RSS_NEWS_FEED_URL = os.environ.get(
+    'RSS_NEWS_FEED_URL',
+    'https://feeds.bbci.co.uk/arabic/sport/rss.xml',
+)

@@ -153,8 +153,8 @@ class MatchAdmin(SafeAdminMixin, admin.ModelAdmin):
 
 
 @admin.register(News)
-class NewsAdmin(admin.ModelAdmin):
-    list_display = ('title', 'published_at', 'is_published', 'related_match')
+class NewsAdmin(SafeAdminMixin, admin.ModelAdmin):
+    list_display = ('title', 'published_at', 'is_published', 'source_url', 'related_match')
     list_filter = ('is_published',)
     search_fields = ('title', 'content')
 
