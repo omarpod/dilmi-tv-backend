@@ -9,6 +9,7 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -121,28 +122,48 @@ TEMPLATES = [
 WSGI_APPLICATION = 'dilmi_tv_backend.wsgi.application'
 
 # =============================================================================
-# قاعدة البيانات: Neon (PostgreSQL) في الإنتاج، SQLite محلياً كبديل تلقائي
+# قاعدة البيانات: Neon (PostgreSQL) دائماً — بدون أي رجوع صامت لـ SQLite
 # =============================================================================
-# dj_database_url.config() يقرأ متغير البيئة DATABASE_URL (الذي يوفّره
-# Render/Neon تلقائياً بصيغة postgres://user:pass@host:port/dbname)
-# ويحوّله لإعدادات DATABASES التي يفهمها Django مباشرة.
+# ⚠️ التعديل الجوهري هنا: كانت النسخة السابقة تتحول تلقائياً وبصمت لـ
+# SQLite محلي إذا لم يوجد DATABASE_URL — وهذا بالضبط ما سبَّب "التضارب"
+# الذي وصفته: تطوّر وتختبر محلياً على بيانات SQLite منفصلة تماماً عن
+# Neon الحقيقية، فتبدو الأمور تعمل محلياً بينما تنهار في الإنتاج لأن
+# البيانات الفعلية مختلفة كلياً بين البيئتين.
 #
-# إذا لم يكن هذا المتغير موجوداً إطلاقاً (مثال: أثناء التطوير على جهازك
-# الشخصي بدون اتصال بـ Neon)، نستخدم SQLite محلياً تلقائياً كبديل، حتى
-# يستمر عمل المشروع محلياً دون أي إعداد إضافي.
+# الآن: DATABASE_URL **إلزامي دائماً** (على جهازك وعلى Render سواء بسواء).
+# إذا لم يكن موجوداً، يتوقف تشغيل المشروع فوراً برسالة خطأ واضحة، بدل
+# الاستمرار بصمت على قاعدة بيانات مختلفة دون أن تلاحظ.
 #
-# ⚠️ conn_max_age=0 (وليس 600 كما كان سابقاً): رابط اتصال Neon الافتراضي
-# غالباً "مُجمَّع" (Pooled) عبر PgBouncer في وضع "Transaction Mode"، وهذا
-# الوضع **لا يتوافق** مع الاتصالات الدائمة المُعاد استخدامها التي يفتحها
-# Django عبر CONN_MAX_AGE > 0 — يسبب أخطاء غامضة (غالباً 500) تحديداً
-# عند الكتابة لقاعدة البيانات (مثل إنشاء جلسة عند تسجيل الدخول)، بينما
-# القراءة العادية تعمل بلا مشاكل. conn_max_age=0 يفتح اتصالاً جديداً
-# نظيفاً لكل طلب، وهو الإعداد الآمن والموصى به رسمياً من Neon مع Django.
+# رجوع اضطراري وصريح فقط (وليس صامتاً): إذا احتجت فعلاً العمل بدون
+# اتصال إنترنت مؤقتاً، فعّل ذلك عمداً عبر متغير بيئة إضافي منفصل:
+#     USE_LOCAL_SQLITE=True
+# هذا يضمن أن أي استخدام لـ SQLite كان **قراراً واعياً**، وليس افتراضياً
+# خفياً قد تنساه.
+_database_url = os.environ.get('DATABASE_URL')
+_allow_local_sqlite = os.environ.get('USE_LOCAL_SQLITE', 'False') == 'True'
+
+if not _database_url and not _allow_local_sqlite:
+    raise ImproperlyConfigured(
+        'متغير البيئة DATABASE_URL غير مُعرَّف. المشروع الآن يعتمد كلياً '
+        'على Neon (PostgreSQL) في كل البيئات لتفادي تضارب البيانات بين '
+        'التطوير المحلي والإنتاج.\n'
+        '- على Render: تأكد من ضبط DATABASE_URL في Environment.\n'
+        '- محلياً: انسخ نفس DATABASE_URL من Render واضبطه في متغيرات '
+        'بيئتك (PowerShell: $env:DATABASE_URL="...").\n'
+        '- إذا احتجت العمل بدون إنترنت مؤقتاً وبوعي كامل بالمخاطر، '
+        'فعّل USE_LOCAL_SQLITE=True عمداً.'
+    )
+
+# ⚠️ conn_max_age=0: رابط اتصال Neon الافتراضي غالباً "مُجمَّع" (Pooled)
+# عبر PgBouncer في وضع "Transaction Mode"، وهذا الوضع **لا يتوافق** مع
+# الاتصالات الدائمة المُعاد استخدامها التي يفتحها Django عبر
+# CONN_MAX_AGE > 0 — يسبب أخطاء غامضة (غالباً 500) تحديداً عند الكتابة
+# لقاعدة البيانات. conn_max_age=0 يفتح اتصالاً جديداً نظيفاً لكل طلب.
 DATABASES = {
     'default': dj_database_url.config(
-        default=f'sqlite:///{BASE_DIR / "db.sqlite3"}',
+        default=_database_url or f'sqlite:///{BASE_DIR / "db.sqlite3"}',
         conn_max_age=0,
-        ssl_require=bool(os.environ.get('DATABASE_URL')),  # Neon يتطلب SSL، SQLite المحلية لا تحتاجه
+        ssl_require=bool(_database_url),  # Neon يتطلب SSL، SQLite المحلية العمدية لا تحتاجه
     )
 }
 

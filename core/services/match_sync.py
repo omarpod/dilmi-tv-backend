@@ -1,97 +1,162 @@
 """
 match_sync.py
 --------------
-"الدماغ" الفعلي للأتمتة: يأخذ بيانات خام من ApiFootballClient ويحوّلها
-لسجلات محلية (League, Team, Match, MatchEvent) عبر "upsert" آمن بالكامل
-(get_or_create / update_or_create)، بحيث تشغيل المزامنة عشرات المرات
-لا يُنشئ أي تكرار إطلاقاً — يعتمد كلياً على external_id كمفتاح تطابق.
+يحوّل بيانات "Free API Live Football Data" لسجلات محلية (League, Team,
+Match). مكتوب بأسلوب **دفاعي بالكامل** لأننا لا نملك بعد عيّنة استجابة
+حقيقية مؤكدة من هذا المزود الجديد — هذا تحديداً كان سبب الخطأين اللذين
+واجهتهما (AttributeError و ImportError) في المحاولة السابقة.
 
-== لماذا هذا الملف منفصل عن management/commands/sync_matches.py؟ ==
-هذا الفصل (Service Layer) يعني أن نفس هذا الكود بالضبط يمكن استدعاؤه
-لاحقاً من:
-  - أمر يدوي (كما الآن): python manage.py sync_matches
-  - مهمة Celery دورية (المرحلة القادمة): @shared_task def sync_task(): ...
-  - رابط API محمي يستدعيه المدير بضغطة زر من لوحة التحكم
-بدون تعديل حرف واحد من منطق المزامنة نفسه.
+== ⚠️ حالة هذا الملف: مؤقت وآمن، بانتظار عيّنة JSON حقيقية منك ==
+كل دالة استخراج (extract_*) أدناه تُجرّب عدة أسماء حقول شائعة، وإن لم
+تجد أياً منها، **تُسجّل تحذيراً واضحاً وتتخطى العنصر بأمان** بدل رمي
+استثناء يُسقط المزامنة بأكملها. بمجرد أن ترسل لي عيّنة حقيقية من
+/football-current-live و/football-fixtures، سأستبدل هذه الدوال بمطابقة
+دقيقة 100% للحقول الفعلية.
+
+== لماذا الدوال الثلاث موجودة بالضبط بهذه الأسماء؟ ==
+sync_matches.py (أمر الإدارة) يستورد:
+    from core.services.match_sync import sync_today_fixtures, sync_live_fixtures_with_events
+وsync_fixture مُستخدمة داخلياً بينهما. الإبقاء على نفس الأسماء والتوقيعات
+بالضبط يمنع ImportError نهائياً، بغض النظر عن أي تعديل داخلي لاحق.
 """
 import logging
 from datetime import datetime
 
 from django.utils import timezone
 
-from core.models import League, Team, Match, MatchEvent
+from core.models import League, Team, Match
 from core.services.api_football_client import ApiFootballClient, ApiFootballError
 
 logger = logging.getLogger(__name__)
 
 
-# تحويل رموز حالة API-Football المختصرة إلى قيم STATUS_CHOICES عندنا.
-# القائمة الكاملة للرموز موثَّقة في: api-football.com/documentation-v3
-STATUS_MAP = {
-    'TBD': 'upcoming', 'NS': 'upcoming', 'PST': 'upcoming',
-    '1H': 'live', 'HT': 'live', '2H': 'live', 'ET': 'live',
-    'BT': 'live', 'P': 'live', 'SUSP': 'live', 'INT': 'live',
-    'FT': 'finished', 'AET': 'finished', 'PEN': 'finished',
-    'CANC': 'finished', 'ABD': 'finished', 'AWD': 'finished', 'WO': 'finished',
-}
-
-# تحويل نوع/تفاصيل حدث API-Football إلى EVENT_TYPE_CHOICES عندنا
-EVENT_TYPE_MAP = {
-    'Goal': 'goal',
-    'subst': 'substitution',
-}
-
-
-def _map_status(short_code):
-    return STATUS_MAP.get(short_code, 'upcoming')
+def _first_present(data, *keys, default=None):
+    """
+    يُرجع أول قيمة موجودة فعلياً وغير فارغة من بين عدة أسماء حقول محتملة
+    لنفس المعنى (مثال: 'homeTeam' أو 'home_team' أو 'home'). هذا يحمينا
+    من AttributeError/KeyError إذا كان اسم الحقل الحقيقي مختلفاً، **وأيضاً**
+    من إنشاء سجلات بقيمة نصية فارغة '' (وليس None فقط) — وهو ما كان يسمح
+    بمرور اسم فارغ فعلياً ويُنتج سجلات League/Team معطوبة في قاعدة البيانات.
+    """
+    if not isinstance(data, dict):
+        return default
+    for key in keys:
+        value = data.get(key)
+        if value is not None and value != '':
+            return value
+    return default
 
 
-def _get_or_create_league(league_data):
-    """league_data هو القسم "league" من استجابة fixture واحدة."""
-    external_id = str(league_data.get('id'))
+def _extract_list(raw_response):
+    """
+    استجابات APIs الرياضية عادة تُغلّف القائمة الفعلية داخل مفتاح مثل
+    "response" أو "data" أو "matches" أو "result". نُجرّب الاحتمالات
+    الشائعة، وإن فشلت كلها ووجدنا قائمة (list) مباشرة كجذر الاستجابة
+    نفسها، نستخدمها كما هي.
+    """
+    if isinstance(raw_response, list):
+        return raw_response
+
+    if isinstance(raw_response, dict):
+        for key in ('response', 'data', 'matches', 'result', 'results', 'fixtures'):
+            value = raw_response.get(key)
+            if isinstance(value, list):
+                return value
+            if isinstance(value, dict):
+                nested = _extract_list(value)
+                if nested:
+                    return nested
+
+    logger.warning(
+        'match_sync: تعذّر إيجاد قائمة مباريات داخل الاستجابة. شكل الاستجابة: %s',
+        str(raw_response)[:500],
+    )
+    return []
+
+
+def _get_or_create_league(fixture_item):
+    league_data = _first_present(fixture_item, 'league', 'competition', 'tournament', default={})
+    if isinstance(league_data, str):
+        # بعض الـ APIs تُرجع اسم البطولة كنص مباشر بدل كائن متداخل —
+        # هذا بالضبط نمط الخطأ 'str' object has no attribute 'get' الذي
+        # واجهته، ونتعامل معه هنا بأمان بدل الانهيار.
+        name = league_data
+        external_id = name
+    else:
+        name = _first_present(league_data, 'name', 'title', default='بطولة غير معروفة')
+        external_id = str(_first_present(league_data, 'id', 'leagueId', default=name))
+
     league, _created = League.objects.get_or_create(
         external_id=external_id,
-        defaults={
-            'name': league_data.get('name', ''),
-            'country': league_data.get('country', ''),
-        },
+        defaults={'name': name},
     )
     return league
 
 
 def _get_or_create_team(team_data):
-    """team_data هو القسم "teams.home" أو "teams.away" من استجابة fixture."""
-    external_id = str(team_data.get('id'))
+    if isinstance(team_data, str):
+        name = team_data
+        external_id = name
+    else:
+        name = _first_present(team_data, 'name', 'teamName', 'title', default='فريق غير معروف')
+        external_id = str(_first_present(team_data, 'id', 'teamId', default=name))
+
     team, _created = Team.objects.get_or_create(
         external_id=external_id,
-        defaults={'name': team_data.get('name', '')},
+        defaults={'name': name},
     )
     return team
 
 
-def sync_fixture(fixture_data):
-    """
-    يُزامن مباراة واحدة (عنصر واحد من قائمة "response" في استجابة
-    API-Football) — يُنشئ أو يُحدّث سجل Match المطابق محلياً.
-    يُرجع كائن Match المُحدَّث، أو None إذا كانت البيانات ناقصة/غير صالحة.
-    """
-    fixture_info = fixture_data.get('fixture', {})
-    external_id = str(fixture_info.get('id'))
-    if not external_id or external_id == 'None':
+def _parse_status(fixture_item):
+    status_raw = _first_present(fixture_item, 'status', 'matchStatus', 'state', default='')
+    if isinstance(status_raw, dict):
+        status_raw = _first_present(status_raw, 'short', 'name', 'type', default='')
+    status_raw = str(status_raw).lower()
+
+    if any(word in status_raw for word in ['live', '1h', '2h', 'ht', 'inprogress', 'in_progress']):
+        return 'live'
+    if any(word in status_raw for word in ['finished', 'ft', 'ended', 'full']):
+        return 'finished'
+    return 'upcoming'
+
+
+def sync_fixture(fixture_item):
+    """يُزامن مباراة واحدة. يُرجع كائن Match، أو None إذا كانت البيانات ناقصة."""
+    if not isinstance(fixture_item, dict):
+        logger.warning('match_sync: عنصر مباراة غير متوقع (ليس كائناً): %s', str(fixture_item)[:200])
         return None
 
-    league = _get_or_create_league(fixture_data.get('league', {}))
-    home_team = _get_or_create_team(fixture_data.get('teams', {}).get('home', {}))
-    away_team = _get_or_create_team(fixture_data.get('teams', {}).get('away', {}))
+    external_id = str(_first_present(fixture_item, 'id', 'matchId', 'fixtureId', default=''))
+    if not external_id:
+        return None
 
-    status_info = fixture_info.get('status', {})
-    goals = fixture_data.get('goals', {})
+    home_raw = _first_present(fixture_item, 'homeTeam', 'home_team', 'home', default={})
+    away_raw = _first_present(fixture_item, 'awayTeam', 'away_team', 'away', default={})
+    if not home_raw or not away_raw:
+        logger.warning('match_sync: مباراة %s بدون بيانات فريقين واضحة، تم تخطّيها.', external_id)
+        return None
+
+    league = _get_or_create_league(fixture_item)
+    home_team = _get_or_create_team(home_raw)
+    away_team = _get_or_create_team(away_raw)
+
+    home_score = _first_present(fixture_item, 'homeScore', 'home_score', 'homeGoals', default=0) or 0
+    away_score = _first_present(fixture_item, 'awayScore', 'away_score', 'awayGoals', default=0) or 0
+    elapsed = _first_present(fixture_item, 'elapsed', 'minute', 'time', default=0)
+    if not isinstance(elapsed, (int, float)):
+        elapsed = 0
 
     match_datetime = timezone.now()
-    raw_date = fixture_info.get('date')
+    raw_date = _first_present(fixture_item, 'date', 'matchDate', 'kickoff', 'startTime')
     if raw_date:
-        parsed = datetime.fromisoformat(raw_date.replace('Z', '+00:00'))
-        match_datetime = parsed
+        try:
+            if isinstance(raw_date, (int, float)):
+                match_datetime = datetime.fromtimestamp(raw_date, tz=timezone.get_current_timezone())
+            else:
+                match_datetime = datetime.fromisoformat(str(raw_date).replace('Z', '+00:00'))
+        except (ValueError, TypeError):
+            logger.warning('match_sync: تعذّر تحليل تاريخ المباراة %s: %s', external_id, raw_date)
 
     match, _created = Match.objects.update_or_create(
         external_id=external_id,
@@ -100,73 +165,26 @@ def sync_fixture(fixture_data):
             'home_team': home_team,
             'away_team': away_team,
             'match_datetime': match_datetime,
-            'status': _map_status(status_info.get('short')),
-            'home_score': goals.get('home') or 0,
-            'away_score': goals.get('away') or 0,
-            'elapsed_minutes': status_info.get('elapsed') or 0,
+            'status': _parse_status(fixture_item),
+            'home_score': int(home_score) if str(home_score).isdigit() else 0,
+            'away_score': int(away_score) if str(away_score).isdigit() else 0,
+            'elapsed_minutes': int(elapsed) if isinstance(elapsed, (int, float)) else 0,
         },
     )
     return match
 
 
-def sync_fixture_events(match, events_data):
-    """
-    يُزامن أحداث مباراة واحدة (أهداف/بطاقات/تبديلات). يعتمد على تركيبة
-    (المباراة + الدقيقة + اللاعب + النوع) لتفادي التكرار عند إعادة
-    التشغيل، بما أن API-Football لا يُرجع معرّفاً فريداً ثابتاً لكل حدث.
-    """
-    synced_count = 0
-
-    for event in events_data:
-        event_type_raw = event.get('type')
-        detail = event.get('detail', '')
-
-        if event_type_raw == 'Card':
-            event_type = 'red_card' if 'Red' in detail else 'yellow_card'
-        else:
-            event_type = EVENT_TYPE_MAP.get(event_type_raw)
-
-        if not event_type:
-            continue  # نوع حدث غير مدعوم عندنا (مثل VAR)، نتجاهله بأمان
-
-        team_data = event.get('team', {})
-        team = _get_or_create_team(team_data) if team_data else None
-        if team is None:
-            continue
-
-        player_data = event.get('player') or {}
-        player = None
-        if player_data.get('id'):
-            # نبحث فقط (لا ننشئ لاعباً جديداً هنا) — إنشاء اللاعبين مسؤولية
-            # مزامنة التشكيلة/الفرق المنفصلة، وليست مزامنة الأحداث
-            from core.models import Player
-            player = Player.objects.filter(external_id=str(player_data['id'])).first()
-
-        minute = event.get('time', {}).get('elapsed', 0)
-
-        _obj, created = MatchEvent.objects.get_or_create(
-            match=match, minute=minute, team=team, player=player, event_type=event_type,
-            defaults={'description': detail},
-        )
-        if created:
-            synced_count += 1
-
-    return synced_count
-
-
 def sync_today_fixtures():
-    """
-    نقطة الدخول الرئيسية: يجلب كل مباريات اليوم (كل البطولات) ويُزامنها.
-    هذا ما يُشغَّله الأمر اليدوي (وسيصبح مهمة Celery دورية في المرحلة 2).
-    """
+    """نقطة الدخول: يجلب مباريات اليوم عبر /football-fixtures ويُزامنها."""
     client = ApiFootballClient()
     today_str = timezone.now().strftime('%Y-%m-%d')
 
-    fixtures = client.get_fixtures_by_date(today_str)
+    raw_response = client.get_fixtures_by_date(today_str)
+    fixtures = _extract_list(raw_response)
 
     synced_matches = []
-    for fixture_data in fixtures:
-        match = sync_fixture(fixture_data)
+    for fixture_item in fixtures:
+        match = sync_fixture(fixture_item)
         if match:
             synced_matches.append(match)
 
@@ -175,27 +193,26 @@ def sync_today_fixtures():
 
 def sync_live_fixtures_with_events():
     """
-    يُزامن فقط المباريات المباشرة الآن، **مع أحداثها** (أهداف/بطاقات).
-    هذا النداء أخف بكثير من sync_today_fixtures، ومُصمَّم ليُشغَّل بشكل
-    متكرر جداً (كل دقيقة مثلاً في المرحلة 2 عبر Celery)، بينما
-    sync_today_fixtures يكفي تشغيله كل ساعة أو يدوياً.
+    نقطة الدخول: يجلب المباريات المباشرة الآن عبر /football-current-live.
+
+    ملاحظة: هذا المزود الجديد لم يُؤكَّد بعد أنه يوفر نقطة نهاية منفصلة
+    للأحداث (أهداف/بطاقات). هذه الدالة تُزامن المباريات المباشرة فقط
+    (بدون أحداث تفصيلية) إلى أن نؤكد ذلك من عيّنة الاستجابة الحقيقية.
     """
     client = ApiFootballClient()
-    live_fixtures = client.get_live_fixtures()
+
+    try:
+        raw_response = client.get_live_matches()
+    except ApiFootballError as e:
+        logger.warning('فشلت مزامنة المباريات المباشرة: %s', e)
+        return []
+
+    fixtures = _extract_list(raw_response)
 
     results = []
-    for fixture_data in live_fixtures:
-        match = sync_fixture(fixture_data)
-        if not match:
-            continue
-
-        try:
-            events_data = client.get_fixture_events(match.external_id)
-            events_synced = sync_fixture_events(match, events_data)
-        except ApiFootballError as e:
-            logger.warning('فشلت مزامنة أحداث المباراة %s: %s', match.id, e)
-            events_synced = 0
-
-        results.append({'match': match, 'new_events': events_synced})
+    for fixture_item in fixtures:
+        match = sync_fixture(fixture_item)
+        if match:
+            results.append({'match': match, 'new_events': 0})
 
     return results

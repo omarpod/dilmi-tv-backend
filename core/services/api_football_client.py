@@ -1,41 +1,44 @@
 """
 api_football_client.py
 ------------------------
-طبقة "خام" (Raw Client) للاتصال بـ API-Football عبر RapidAPI. مسؤوليتها
-الوحيدة: إرسال الطلبات واستقبال JSON، بدون أي منطق حفظ في قاعدة البيانات
-(ذلك في match_sync.py). هذا الفصل يجعل الكود قابلاً للاختبار بسهولة،
-وجاهزاً لأن يُستدعى لاحقاً من داخل مهمة Celery دورية دون أي تعديل —
-فقط استبدال "من يستدعي هذه الدالة" (أمر يدوي الآن، مهمة Celery لاحقاً).
+طبقة "خام" (Raw Client) للاتصال بمزود "Free API Live Football Data" عبر
+RapidAPI. مسؤوليتها الوحيدة: إرسال الطلبات واستقبال JSON، بدون أي منطق
+تحويل/حفظ في قاعدة البيانات (ذلك في match_sync.py).
 
-== كيف تحصل على مفتاح API-Football؟ ==
-1. أنشئ حساباً على https://rapidapi.com
-2. ابحث عن "API-FOOTBALL" واشترك (توجد خطة مجانية محدودة، ثم خطط مدفوعة)
-3. من صفحة الـ API، انسخ "X-RapidAPI-Key" الخاص بك
-4. أضفه كمتغير بيئة في Render باسم: API_FOOTBALL_KEY
+== ⚠️ ملاحظة أمنية مهمة حول المفتاح ==
+طلبت دمج المفتاح مباشرة في الكود لتجنّب مشاكل متغيرات البيئة. نفّذنا
+هذا، لكن بنمط أكثر أماناً: **متغير البيئة API_FOOTBALL_KEY يُقرأ أولاً
+دائماً، والمفتاح المكتوب هنا يُستخدم فقط كقيمة احتياطية إن لم يوجد
+المتغير**. النتيجة العملية: الكود يعمل فوراً بدون أي إعداد إضافي (كما
+طلبت)، لكن يبقى بإمكانك حماية المفتاح لاحقاً بضبط المتغير على Render
+دون تعديل الكود مطلقاً.
+
+بما أن مستودعك مرفوع على GitHub، **ضع في اعتبارك تدوير (تغيير) هذا
+المفتاح من لوحة RapidAPI لاحقاً** إذا كان المستودع عاماً (Public) أو قد
+يصبح كذلك — أي شخص يصل لهذا الملف يرى المفتاح.
 """
 import os
 import requests
 
-BASE_URL = 'https://api-football-v1.p.rapidapi.com/v3'
+BASE_URL = 'https://free-api-live-football-data.p.rapidapi.com'
+API_HOST = 'free-api-live-football-data.p.rapidapi.com'
+
+# القيمة الاحتياطية (Fallback) — تُستخدم فقط إن لم يوجد متغير البيئة
+_FALLBACK_API_KEY = 'fddd70b364msh20579541dd0003bp1e2760jsnfb64dfca3a40'
 
 
 class ApiFootballError(Exception):
-    """يُرفع عند أي فشل في الاتصال بـ API-Football (مفتاح مفقود، حد الطلبات
-    اليومي انتهى، خطأ شبكة...)، حتى يُميَّز بوضوح عن أي استثناء آخر."""
+    """يُرفع عند أي فشل في الاتصال بالـ API (مفتاح خاطئ، حد الطلبات
+    اليومي انتهى، خطأ شبكة، استجابة غير متوقعة...)."""
 
 
 class ApiFootballClient:
     def __init__(self):
-        self.api_key = os.environ.get('API_FOOTBALL_KEY')
+        self.api_key = os.environ.get('API_FOOTBALL_KEY') or _FALLBACK_API_KEY
 
     def _headers(self):
-        if not self.api_key:
-            raise ApiFootballError(
-                'متغير البيئة API_FOOTBALL_KEY غير مُعرَّف. أضفه من إعدادات '
-                'Render ← Environment قبل تشغيل المزامنة.'
-            )
         return {
-            'x-rapidapi-host': 'api-football-v1.p.rapidapi.com',
+            'x-rapidapi-host': API_HOST,
             'x-rapidapi-key': self.api_key,
         }
 
@@ -48,29 +51,36 @@ class ApiFootballClient:
                 timeout=20,
             )
         except requests.RequestException as e:
-            raise ApiFootballError(f'فشل الاتصال بـ API-Football: {e}') from e
+            raise ApiFootballError(f'فشل الاتصال بالـ API: {e}') from e
 
         if response.status_code != 200:
             raise ApiFootballError(
-                f'API-Football أعاد رمز حالة {response.status_code}: {response.text[:300]}'
+                f'الـ API أعاد رمز حالة {response.status_code}: {response.text[:300]}'
             )
 
-        data = response.json()
-        # API-Football يُرجع أخطاءه الخاصة داخل الاستجابة نفسها (وليس عبر
-        # رمز HTTP دائماً)، مثال: تجاوز الحد اليومي للطلبات
-        if data.get('errors'):
-            raise ApiFootballError(f'API-Football أعاد خطأ: {data["errors"]}')
+        try:
+            data = response.json()
+        except ValueError as e:
+            raise ApiFootballError(f'الاستجابة ليست JSON صالحاً: {response.text[:300]}') from e
 
-        return data.get('response', [])
+        return data
 
-    def get_fixtures_by_date(self, date_str):
-        """يجلب كل مباريات يوم معيّن (بصيغة YYYY-MM-DD) عبر كل البطولات."""
-        return self._get('fixtures', {'date': date_str})
+    def get_live_matches(self):
+        """
+        يجلب المباريات المباشرة الآن عبر /football-current-live.
 
-    def get_live_fixtures(self):
-        """يجلب كل المباريات المباشرة الآن في العالم (نداء أخف من جلب كل شيء)."""
-        return self._get('fixtures', {'live': 'all'})
+        ⚠️ نُرجع استجابة الـ API "كما هي" (raw) دون افتراض شكلها بعد —
+        match_sync.py هو من يتعامل مع استخراج قائمة المباريات منها،
+        بمجرد أن نعرف شكلها الحقيقي من العيّنة التي سترسلها.
+        """
+        return self._get('football-current-live')
 
-    def get_fixture_events(self, fixture_external_id):
-        """يجلب أحداث مباراة واحدة (أهداف، بطاقات، تبديلات)."""
-        return self._get('fixtures/events', {'fixture': fixture_external_id})
+    def get_fixtures_by_date(self, date_str=None):
+        """
+        يجلب المباريات حسب التاريخ عبر /football-fixtures.
+        [date_str] بصيغة YYYY-MM-DD؛ إن تُرك فارغاً، نعتمد على السلوك
+        الافتراضي لهذا الـ API (على الأرجح يومه الحالي، سنؤكد هذا من
+        العيّنة الحقيقية أيضاً).
+        """
+        params = {'date': date_str} if date_str else {}
+        return self._get('football-fixtures', params)

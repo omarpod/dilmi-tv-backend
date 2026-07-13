@@ -1,7 +1,8 @@
 """
 admin.py
 --------
-لوحة تحكم معدلة بأسلوب دفاعي لمنع انهيار الموقع عند وجود بيانات غير مكتملة.
+هذا الملف يتحكم في شكل لوحة تحكم Django الجاهزة (/admin).
+تسجيل كل model هنا يجعله يظهر في اللوحة تلقائياً مع نموذج إدخال/تعديل جاهز.
 """
 from django.contrib import admin
 from .models import (
@@ -9,27 +10,42 @@ from .models import (
     Analytics, SiteSettings, NotificationSubscriber, StaticPage,
 )
 
+
 @admin.register(League)
 class LeagueAdmin(admin.ModelAdmin):
-    list_display = ('name', 'country', 'external_id')
+    list_display = ('safe_name', 'country', 'external_id')
     search_fields = ('name',)
+
+    def safe_name(self, obj):
+        return obj.name or 'غير محدَّد'
+    safe_name.short_description = 'الاسم'
+
 
 @admin.register(Channel)
 class ChannelAdmin(admin.ModelAdmin):
+    # الأعمدة التي تظهر في قائمة القنوات
     list_display = ('name', 'category', 'is_active', 'order')
-    list_editable = ('is_active', 'order')
+    list_editable = ('is_active', 'order')  # يمكن تعديلها مباشرة من القائمة دون فتح الصفحة
     search_fields = ('name',)
     list_filter = ('category', 'is_active')
 
+
 class PlayerInline(admin.TabularInline):
+    """يسمح بإضافة/تعديل لاعبي الفريق مباشرة من صفحة الفريق نفسه."""
     model = Player
-    extra = 1
+    extra = 1  # عدد الحقول الفارغة الجاهزة للإضافة السريعة
+
 
 @admin.register(Team)
 class TeamAdmin(admin.ModelAdmin):
-    list_display = ('name', 'country')
+    list_display = ('safe_name', 'country')
     search_fields = ('name',)
     inlines = [PlayerInline]
+
+    def safe_name(self, obj):
+        return obj.name or 'غير محدَّد'
+    safe_name.short_description = 'الاسم'
+
 
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
@@ -42,31 +58,46 @@ class PlayerAdmin(admin.ModelAdmin):
     has_photo.short_description = 'له صورة؟'
     has_photo.boolean = True
 
+
 class LineupInline(admin.TabularInline):
+    """يسمح بإدخال تشكيلة المباراة مباشرة من صفحة المباراة."""
     model = LineupEntry
     extra = 1
 
+
 class MatchEventInline(admin.TabularInline):
+    """يسمح بإدخال أحداث المباراة (أهداف، بطاقات) مباشرة من صفحة المباراة."""
     model = MatchEvent
     extra = 1
 
+
 @admin.register(Match)
 class MatchAdmin(admin.ModelAdmin):
-    # استخدام الدوال الدفاعية الجديدة لمنع الخطأ 500
-    list_display = ('match_name', 'competition_display', 'status', 'home_score', 'away_score', 'elapsed_minutes', 'channel')
+    list_display = (
+        'safe_match_title', 'safe_competition', 'status',
+        'home_score', 'away_score', 'elapsed_minutes', 'channel',
+    )
     list_filter = ('status', 'league')
     search_fields = ('home_team__name', 'away_team__name')
     inlines = [LineupInline, MatchEventInline]
 
-    def match_name(self, obj):
-        home = obj.home_team.name if obj.home_team else "فريق غير معروف"
-        away = obj.away_team.name if obj.away_team else "فريق غير معروف"
-        return f"{home} vs {away}"
-    match_name.short_description = 'المباراة'
+    def safe_match_title(self, obj):
+        # لا نعتمد على __str__ مباشرة في list_display (رغم أنها محصَّنة
+        # الآن في models.py) — طبقة حماية إضافية صريحة هنا في الأدمن
+        # نفسه، حتى لا تعتمد صفحة القائمة على افتراض واحد فقط.
+        try:
+            return str(obj)
+        except Exception:
+            return f'مباراة #{obj.pk}'
+    safe_match_title.short_description = 'المباراة'
 
-    def competition_display(self, obj):
-        return obj.league.name if obj.league else "دوري غير معروف"
-    competition_display.short_description = 'الدوري'
+    def safe_competition(self, obj):
+        try:
+            return obj.competition_display
+        except Exception:
+            return 'غير محدَّد'
+    safe_competition.short_description = 'البطولة'
+
 
 @admin.register(News)
 class NewsAdmin(admin.ModelAdmin):
@@ -74,26 +105,37 @@ class NewsAdmin(admin.ModelAdmin):
     list_filter = ('is_published',)
     search_fields = ('title', 'content')
 
+
 @admin.register(AdSettings)
 class AdSettingsAdmin(admin.ModelAdmin):
+    # لا حاجة لقائمة كاملة، هذا السجل يكون واحداً فقط دائماً
     list_display = ('banner_enabled', 'interstitial_enabled', 'updated_at')
+
     def has_add_permission(self, request):
+        # يمنع إنشاء أكثر من سجل واحد لإعدادات الإعلانات
         return not AdSettings.objects.exists()
+
 
 @admin.register(Analytics)
 class AnalyticsAdmin(admin.ModelAdmin):
+    # هذا الجدول للقراءة فقط عملياً (يُملأ تلقائياً من التطبيق، وليس يدوياً)
     list_display = ('device', 'screen', 'ip_address', 'timestamp')
     list_filter = ('screen',)
     search_fields = ('device', 'ip_address')
     readonly_fields = ('ip_address', 'device', 'screen', 'timestamp')
+
     def has_add_permission(self, request):
+        # لا معنى لإضافة زيارة يدوياً من لوحة التحكم
         return False
+
 
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
     list_display = ('contact_email', 'facebook_url', 'instagram_url', 'telegram_url', 'updated_at')
+
     def has_add_permission(self, request):
         return not SiteSettings.objects.exists()
+
 
 @admin.register(NotificationSubscriber)
 class NotificationSubscriberAdmin(admin.ModelAdmin):
@@ -101,9 +143,12 @@ class NotificationSubscriberAdmin(admin.ModelAdmin):
     list_editable = ('is_active',)
     list_filter = ('device_platform', 'is_active')
     search_fields = ('fcm_token',)
+
     def fcm_token_short(self, obj):
-        return f'{obj.fcm_token[:24]}...' if obj.fcm_token else 'N/A'
+        # نعرض جزءاً قصيراً فقط من الرمز الطويل حتى لا تتشوّه القائمة
+        return f'{obj.fcm_token[:24]}...'
     fcm_token_short.short_description = 'رمز الجهاز'
+
 
 @admin.register(StaticPage)
 class StaticPageAdmin(admin.ModelAdmin):
