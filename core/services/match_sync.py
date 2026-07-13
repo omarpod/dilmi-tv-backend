@@ -58,7 +58,10 @@ def _extract_list(raw_response):
         return raw_response
 
     if isinstance(raw_response, dict):
-        for key in ('response', 'data', 'matches', 'result', 'results', 'fixtures'):
+        # 'live' أُضيف بعد تأكيد شكل الاستجابة الحقيقي فعلياً من سجل
+        # تنفيذك (Free API Live Football Data يُغلّف القائمة تحديداً
+        # داخل response.live، خلافاً لكل الأسماء الشائعة الأخرى المجرَّبة)
+        for key in ('response', 'data', 'matches', 'result', 'results', 'fixtures', 'live'):
             value = raw_response.get(key)
             if isinstance(value, list):
                 return value
@@ -174,18 +177,52 @@ def sync_fixture(fixture_item):
     return match
 
 
-def sync_today_fixtures():
-    """نقطة الدخول: يجلب مباريات اليوم عبر /football-fixtures ويُزامنها."""
+def _fetch_live_fixtures():
+    """
+    دالة مساعدة مشتركة: تجلب استجابة /football-current-live مرة واحدة
+    (المصدر الوحيد المتاح من هذا المزود، مؤكَّد تجريبياً عبر
+    probe_api_endpoints — كل مسارات /fixtures التاريخية أعادت 404).
+    كل من sync_today_fixtures و sync_live_fixtures_with_events تستدعيها،
+    فتصفيتهما تختلف فقط بما يُفعلانه بالنتيجة بعد الجلب.
+    """
     client = ApiFootballClient()
-    today_str = timezone.now().strftime('%Y-%m-%d')
+    try:
+        raw_response = client.get_live_matches()
+    except ApiFootballError as e:
+        logger.warning('فشل جلب البيانات من /football-current-live: %s', e)
+        return []
+    return _extract_list(raw_response)
 
-    raw_response = client.get_fixtures_by_date(today_str)
-    fixtures = _extract_list(raw_response)
+
+def sync_today_fixtures():
+    """
+    نقطة الدخول: بما أن هذا المزود **لا يوفر** نقطة نهاية منفصلة لمباريات
+    تاريخ محدَّد (تأكَّد هذا تجريبياً — كل مسارات /fixtures أعادت 404)،
+    أصبحت هذه الدالة تعتمد على *نفس* بيانات /football-current-live، ثم
+    تُصفّي **محلياً في بايثون** أي مباراة لا يقع تاريخها ضمن اليوم
+    الحالي — بدل الاعتماد على فلترة من طرف الـ API نفسه (غير متاحة).
+
+    ملاحظة: إن تعذّر تحديد تاريخ مباراة معيّنة بثقة (بيانات ناقصة من
+    الـ API)، **نُدرجها بدل استبعادها بصمت** — تفادياً لإخفاء بيانات
+    حقيقية بسبب خطأ تحليل تاريخ بسيط.
+    """
+    fixtures = _fetch_live_fixtures()
+    today = timezone.localdate()
 
     synced_matches = []
     for fixture_item in fixtures:
         match = sync_fixture(fixture_item)
-        if match:
+        if not match:
+            continue
+
+        include = True  # افتراضياً نُدرج، إلا إذا أثبتنا أن التاريخ مختلف فعلاً
+        try:
+            match_date = timezone.localtime(match.match_datetime).date()
+            include = (match_date == today)
+        except (ValueError, TypeError):
+            pass  # تعذّر التحديد بثقة → نُبقي include=True (لا نُخفي بيانات بصمت)
+
+        if include:
             synced_matches.append(match)
 
     return synced_matches
@@ -193,21 +230,14 @@ def sync_today_fixtures():
 
 def sync_live_fixtures_with_events():
     """
-    نقطة الدخول: يجلب المباريات المباشرة الآن عبر /football-current-live.
+    نقطة الدخول: يجلب المباريات المباشرة الآن عبر /football-current-live
+    **بدون** أي تصفية بالتاريخ (خلافاً لـ sync_today_fixtures أعلاه) —
+    كل ما يُرجعه الـ API في هذه اللحظة يُزامَن مباشرة.
 
-    ملاحظة: هذا المزود الجديد لم يُؤكَّد بعد أنه يوفر نقطة نهاية منفصلة
-    للأحداث (أهداف/بطاقات). هذه الدالة تُزامن المباريات المباشرة فقط
-    (بدون أحداث تفصيلية) إلى أن نؤكد ذلك من عيّنة الاستجابة الحقيقية.
+    ملاحظة: هذا المزود لم يُؤكَّد بعد أنه يوفر نقطة نهاية منفصلة للأحداث
+    (أهداف/بطاقات). هذه الدالة تُزامن المباريات فقط (بدون أحداث تفصيلية).
     """
-    client = ApiFootballClient()
-
-    try:
-        raw_response = client.get_live_matches()
-    except ApiFootballError as e:
-        logger.warning('فشلت مزامنة المباريات المباشرة: %s', e)
-        return []
-
-    fixtures = _extract_list(raw_response)
+    fixtures = _fetch_live_fixtures()
 
     results = []
     for fixture_item in fixtures:
