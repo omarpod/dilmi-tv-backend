@@ -4,9 +4,11 @@ import requests
 BASE_URL = 'https://free-api-live-football-data.p.rapidapi.com'
 API_HOST = 'free-api-live-football-data.p.rapidapi.com'
 
+# القيمة الاحتياطية (Fallback) — تُستخدم فقط إن لم يوجد متغير البيئة
 _FALLBACK_API_KEY = 'fddd70b364msh20579541dd0003bp1e2760jsnfb64dfca3a40'
 
 class ApiFootballError(Exception):
+    """يُرفع عند أي فشل في الاتصال بالـ API."""
     pass
 
 class ApiFootballClient:
@@ -41,13 +43,12 @@ class ApiFootballClient:
             raise ApiFootballError(f'الاستجابة ليست JSON صالحاً: {response.text[:300]}')
 
     def get_live_matches(self):
-        # تم تغيير المسار ليتوافق مع تحديثات الـ API
+        # المسار المستخدم للمباريات المباشرة
         return self._get('football-current-live')
 
     def get_fixtures_by_date(self, date_str=None):
         """
-        تم تحديث المسار إلى 'football-fixtures' كمسار أساسي، 
-        إذا استمر الـ 404، سنقوم بتغييره إلى 'football-matches'
+        تم تعديل المسار هنا إلى 'fixtures' بعد خطأ 404 السابق.
         """
         params = {'date': date_str} if date_str else {}
-        return self._get('football-fixtures', params)
+        return self._get('fixtures', params)
