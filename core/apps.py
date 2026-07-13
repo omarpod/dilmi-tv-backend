@@ -53,3 +53,10 @@ class CoreConfig(AppConfig):
             return original_index(request, extra_context)
 
         admin.site.index = index_with_stats
+
+        # يبدأ فقط إذا كان ENABLE_SCHEDULER='True' مضبوطاً صراحة (راجع
+        # التوثيق الكامل في core/scheduler.py) — آمن تماماً لتشغيله هنا
+        # لأن start_scheduler() نفسها تتحقق من هذا الشرط أولاً، فلا يحدث
+        # شيء إطلاقاً أثناء migrate/makemigrations/أي أمر إداري آخر.
+        from core.scheduler import start_scheduler
+        start_scheduler()

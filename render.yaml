@@ -26,6 +26,13 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.7
+      # ⚠️ ENABLE_SCHEDULER: يُفعّل مجدوِل سحب الأخبار كل 6 ساعات (راجع
+      # core/scheduler.py). ملاحظة مهمة: إذا شغّلت Gunicorn لاحقاً بأكثر
+      # من عامل (worker) واحد عبر "--workers"، سيبدأ المجدوِل مرة لكل
+      # عامل (تكرار مهام). Render الحرة تستخدم عاملاً واحداً افتراضياً
+      # (Start Command الحالي لا يحدد --workers)، فهذا آمن كما هو الآن.
+      - key: ENABLE_SCHEDULER
+        value: 'True'
       # اضبط هذه القيم من لوحة تحكم Render (Environment) وليس هنا —
       # sync: false يمنع Render من محاولة قراءة قيمة فعلية من هذا الملف
       - key: SECRET_KEY
