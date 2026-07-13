@@ -4,15 +4,68 @@ admin.py
 هذا الملف يتحكم في شكل لوحة تحكم Django الجاهزة (/admin).
 تسجيل كل model هنا يجعله يظهر في اللوحة تلقائياً مع نموذج إدخال/تعديل جاهز.
 """
-from django.contrib import admin
+import logging
+
+from django.contrib import admin, messages
+from django.http import HttpResponseRedirect
+from django.urls import reverse
+
 from .models import (
     League, Channel, Team, Player, Match, MatchEvent, LineupEntry, News, AdSettings,
     Analytics, SiteSettings, NotificationSubscriber, StaticPage,
 )
 
+logger = logging.getLogger(__name__)
+
+
+class SafeAdminMixin:
+    """
+    ⚠️ طبقة الحماية "العنيفة" الحقيقية: تُغلّف صفحتَي القائمة (changelist)
+    والإضافة/التعديل (changeform) بـ try/except شامل على مستوى Django
+    نفسه — وليس فقط على مستوى دالة عرض حقل واحد كما في safe_name/
+    safe_match_title (تلك تحمي عرض حقل *بعد* نجاح الاستعلام فقط).
+
+    هذا يعني: حتى لو فشل الاستعلام الأساسي نفسه (مثال حقيقي: عمود
+    "league_id" غير موجود فعلياً في قاعدة البيانات بسبب ترحيل ناقص —
+    وهو خطأ يحدث *قبل* وصول الكود لأي دالة عرض إطلاقاً)، لا تظهر صفحة
+    "Server Error (500)" الافتراضية القبيحة أبداً — بدلاً منها: رسالة
+    عربية واضحة + إعادة توجيه فوري للوحة الرئيسية، مع تسجيل كامل تفاصيل
+    الخطأ الحقيقي في السجلات (Logs) لتشخيصه لاحقاً عبر check_db_health.
+    """
+
+    def changelist_view(self, request, extra_context=None):
+        try:
+            return super().changelist_view(request, extra_context)
+        except Exception as e:
+            logger.error(
+                'فشل عرض قائمة %s: %s', self.model.__name__, e, exc_info=True,
+            )
+            messages.error(
+                request,
+                f'تعذّر عرض قائمة "{self.model._meta.verbose_name_plural}" بسبب '
+                f'خطأ تقني ({type(e).__name__}). شغّل "python manage.py check_db_health" '
+                'لتشخيص السبب الدقيق (غالباً عمود/جدول مفقود في قاعدة البيانات).',
+            )
+            return HttpResponseRedirect(reverse('admin:index'))
+
+    def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
+        try:
+            return super().changeform_view(request, object_id, form_url, extra_context)
+        except Exception as e:
+            logger.error(
+                'فشل عرض نموذج %s (id=%s): %s', self.model.__name__, object_id, e, exc_info=True,
+            )
+            messages.error(
+                request,
+                f'تعذّر عرض/تعديل هذا السجل بسبب خطأ تقني ({type(e).__name__}). '
+                'شغّل "python manage.py check_db_health" لتشخيص السبب.',
+            )
+            return HttpResponseRedirect(reverse('admin:index'))
+
+
 
 @admin.register(League)
-class LeagueAdmin(admin.ModelAdmin):
+class LeagueAdmin(SafeAdminMixin, admin.ModelAdmin):
     list_display = ('safe_name', 'country', 'external_id')
     search_fields = ('name',)
 
@@ -37,7 +90,7 @@ class PlayerInline(admin.TabularInline):
 
 
 @admin.register(Team)
-class TeamAdmin(admin.ModelAdmin):
+class TeamAdmin(SafeAdminMixin, admin.ModelAdmin):
     list_display = ('safe_name', 'country')
     search_fields = ('name',)
     inlines = [PlayerInline]
@@ -48,7 +101,7 @@ class TeamAdmin(admin.ModelAdmin):
 
 
 @admin.register(Player)
-class PlayerAdmin(admin.ModelAdmin):
+class PlayerAdmin(SafeAdminMixin, admin.ModelAdmin):
     list_display = ('name', 'team', 'shirt_number', 'position', 'has_photo')
     list_filter = ('team', 'position')
     search_fields = ('name',)
@@ -72,7 +125,7 @@ class MatchEventInline(admin.TabularInline):
 
 
 @admin.register(Match)
-class MatchAdmin(admin.ModelAdmin):
+class MatchAdmin(SafeAdminMixin, admin.ModelAdmin):
     list_display = (
         'safe_match_title', 'safe_competition', 'status',
         'home_score', 'away_score', 'elapsed_minutes', 'channel',

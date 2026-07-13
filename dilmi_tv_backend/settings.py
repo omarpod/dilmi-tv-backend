@@ -61,6 +61,14 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 # التطبيقات المُفعّلة (Installed Apps)
 # =============================================================================
 INSTALLED_APPS = [
+    # admin_interface و colorfield يجب أن يكونا قبل django.contrib.admin
+    # مباشرة (شرط موثَّق رسمياً من المكتبة) — يضيفان قسم "Themes" داخل
+    # لوحة التحكم لتخصيص الألوان تفاعلياً دون لمس الكود. لا يستبدلان
+    # base_site.html المخصص عندنا حالياً (يبقى هو الفعّال تلقائياً)، لذا
+    # صفر خطر على الاستقرار الحالي — فقط أداة إضافية متاحة عند الحاجة.
+    'admin_interface',
+    'colorfield',
+
     'django.contrib.admin',        # لوحة تحكم Django الجاهزة (ثيمها الأصلي، مُخصَّص عبر CSS فقط)
     'django.contrib.auth',         # نظام المستخدمين وتسجيل الدخول
     'django.contrib.contenttypes',
@@ -79,6 +87,11 @@ INSTALLED_APPS = [
 
     'core',                        # تطبيقنا الخاص
 ]
+
+# مطلوبة من django-admin-interface لدعم النوافذ المنبثقة (Modals) بدل
+# نوافذ popup تقليدية، وإسكات تحذير أمني غير مؤثر معروف من المكتبة نفسها
+X_FRAME_OPTIONS = 'SAMEORIGIN'
+SILENCED_SYSTEM_CHECKS = ['security.W019']
 
 # =============================================================================
 # الوسائط (Middleware)
