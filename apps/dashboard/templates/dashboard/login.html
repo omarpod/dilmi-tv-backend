@@ -1,0 +1,24 @@
+{% load static %}<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>تسجيل الدخول | Dilmi TV</title>
+  <link rel="stylesheet" href="{% static 'dashboard/css/dashboard.css' %}">
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card" method="post">
+      {% csrf_token %}
+      <h1>Dilmi TV — لوحة التحكم</h1>
+      {% if form.errors %}
+        <div class="errors">اسم المستخدم أو كلمة المرور غير صحيحة.</div>
+      {% endif %}
+      <input type="text" name="username" placeholder="اسم المستخدم" autofocus required>
+      <input type="password" name="password" placeholder="كلمة المرور" required>
+      <input type="hidden" name="next" value="{{ next }}">
+      <button type="submit">دخول</button>
+    </form>
+  </div>
+</body>
+</html>

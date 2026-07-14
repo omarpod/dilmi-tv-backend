@@ -1,0 +1,131 @@
+{% extends "dashboard/base.html" %}
+{% block nav_dashboard %}active{% endblock %}
+{% block page_title %}الرئيسية{% endblock %}
+
+{% block content %}
+<div class="stat-grid">
+  <div class="card stat-card">
+    <div class="label">المشاهدون المباشرون الآن</div>
+    <div class="value accent">{{ stats.current_live_viewers }}</div>
+    <svg class="sparkline" viewBox="0 0 {{ sparkline.width }} {{ sparkline.height }}" preserveAspectRatio="none">
+      <polyline points="{{ sparkline.points }}"></polyline>
+    </svg>
+  </div>
+  <div class="card stat-card">
+    <div class="label">مباريات مباشرة الآن</div>
+    <div class="value">{{ stats.live_now }}</div>
+  </div>
+  <div class="card stat-card">
+    <div class="label">الأجهزة الفريدة اليوم</div>
+    <div class="value">{{ stats.unique_devices_today }}</div>
+  </div>
+  <div class="card stat-card">
+    <div class="label">نسبة التفاعل</div>
+    <div class="value">{% if stats.engagement_pct is not None %}{{ stats.engagement_pct }}%{% else %}—{% endif %}</div>
+  </div>
+</div>
+
+<div class="main-grid">
+  <div class="card panel">
+    <h2>إدارة المباريات المباشرة</h2>
+    <p style="color:var(--muted); font-size:12px; margin-top:-10px;">
+      إجمالي المباريات: {{ stats.total_matches }} · القنوات النشِطة: {{ stats.active_channels }} · الأخبار المنشورة: {{ stats.published_news }}
+    </p>
+    {% if live_matches %}
+    <table class="matches">
+      <thead>
+        <tr>
+          <th>المباراة</th>
+          <th>البطولة</th>
+          <th>النتيجة</th>
+          <th>الدقيقة</th>
+          <th>القناة</th>
+          <th>المشاهدون</th>
+          <th>الحالة</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for match in live_matches %}
+        <tr>
+          <td>{{ match.home_team }} vs {{ match.away_team }}</td>
+          <td>{{ match.competition|default:"—" }}</td>
+          <td>{{ match.home_score }} - {{ match.away_score }}</td>
+          <td>{{ match.elapsed_minutes }}'</td>
+          <td>{{ match.channel.name|default:"—" }}</td>
+          <td>{{ match.live_viewers }}</td>
+          <td><span class="badge-live">مباشر</span></td>
+          <td style="white-space:nowrap;">
+            <a class="btn btn-edit" href="/admin/core/match/{{ match.pk }}/change/">تعديل</a>
+            <form method="post" action="{% url 'dashboard:broadcast-toggle' match.pk %}" style="display:inline;">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-end">إنهاء</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">لا توجد مباريات مباشرة حالياً.</p>
+    {% endif %}
+  </div>
+
+  <div class="card panel donut-wrap">
+    <h2 style="align-self:flex-start;">توزيع الأجهزة</h2>
+    <div class="donut" style="background: conic-gradient({{ donut.gradient }});">
+      <div class="hole">
+        <span class="n">{{ donut.total }}</span>
+        <span class="l">مشاهد</span>
+      </div>
+    </div>
+    <div class="legend">
+      {% for item in donut.legend %}
+      <div class="legend-item">
+        <span class="dot" style="background:{{ item.color }};"></span>
+        <span>{{ item.label }}</span>
+        <span class="pct">{{ item.pct }}%</span>
+      </div>
+      {% empty %}
+      <p class="empty" style="text-align:center; margin:0;">لا يوجد مشاهدون مباشرون حالياً.</p>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<div class="card panel" style="margin-top:16px;">
+  <h2>المباريات القادمة</h2>
+  {% if upcoming_matches %}
+  <table class="matches">
+    <thead>
+      <tr>
+        <th>المباراة</th>
+        <th>البطولة</th>
+        <th>الموعد</th>
+        <th>القناة</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for match in upcoming_matches %}
+      <tr>
+        <td>{{ match.home_team }} vs {{ match.away_team }}</td>
+        <td>{{ match.competition|default:"—" }}</td>
+        <td>{{ match.match_datetime|date:"Y-m-d H:i" }}</td>
+        <td>{{ match.channel.name|default:"—" }}</td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-edit" href="/admin/core/match/{{ match.pk }}/change/">تعديل</a>
+          <form method="post" action="{% url 'dashboard:broadcast-toggle' match.pk %}" style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-broadcast">بدء البث</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">لا توجد مباريات قادمة مجدولة.</p>
+  {% endif %}
+</div>
+{% endblock %}

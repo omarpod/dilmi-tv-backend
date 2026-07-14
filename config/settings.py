@@ -39,6 +39,15 @@ for _host in filter(None, (h.strip() for h in _extra_hosts.split(','))):
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
+# خلف بروكسي Railway HTTPS دائماً في الإنتاج. نُفعّل هذه فقط عندما
+# DEBUG=False (محلياً على http عادي، تفعيلها يمنع تسجيل الدخول أصلاً)
+SECURE_SSL_REDIRECT = not DEBUG
+SESSION_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SECURE = not DEBUG
+SECURE_HSTS_SECONDS = 60 * 60 * 24 * 7 if not DEBUG else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
+SECURE_HSTS_PRELOAD = not DEBUG
+
 # =============================================================================
 # التطبيقات المُفعّلة
 # =============================================================================
@@ -59,6 +68,8 @@ INSTALLED_APPS = [
     'corsheaders',
 
     'apps.core',
+    'apps.analytics',
+    'apps.dashboard',
 ]
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
@@ -169,15 +180,58 @@ REST_FRAMEWORK = {
 }
 
 # =============================================================================
+# التسجيل (Logging)
+# =============================================================================
+# بدون هذا، لا تظهر أي تفاصيل عن أخطاء الـ 500 في سجلات Railway إطلاقاً:
+# سلوك Django الافتراضي عند DEBUG=False يُرسل أخطاء django.request إلى
+# mail_admins فقط (يتطلب SMTP مضبوطاً)، وليس إلى stdout/stderr. هذا
+# يُجبر كل الأخطاء (بما فيها استثناءات قاعدة البيانات) على الظهور في
+# "Deploy Logs" مباشرة، بغض النظر عن DEBUG.
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.db.backends': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
+}
+
+# =============================================================================
 # هوية لوحة التحكم (django-admin-interface)
 # =============================================================================
 ADMIN_SITE_HEADER = 'Dilmi TV'
 ADMIN_SITE_TITLE = 'Dilmi TV'
 ADMIN_INDEX_TITLE = 'إدارة الموقع'
 
+# =============================================================================
+# لوحة التحكم المخصصة (apps.dashboard) — منفصلة عن /admin/
+# =============================================================================
+LOGIN_URL = 'dashboard:login'
+LOGIN_REDIRECT_URL = 'dashboard:index'
+
 # ألوان الثيم الافتراضي — تُضبط تلقائياً عند أول تشغيل عبر core/apps.py
 # (يمكن تعديلها لاحقاً بصرياً من /admin/ نفسه عبر قسم "Themes")
 DILMI_THEME_COLORS = {
+    'title': 'Dilmi TV',
+    'title_visible': True,
+    'logo_visible': False,
     'css_header_background_color': '#0B1220',
     'css_header_text_color': '#B6FF3C',
     'css_header_link_color': '#B6FF3C',
