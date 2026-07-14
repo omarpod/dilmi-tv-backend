@@ -8,9 +8,11 @@ apps/core/integrations/rapidapi_football.py
 
 ملاحظة أمانة مهمة: لم أتمكن من الوصول لتوثيق شكل الاستجابة الدقيق لهذا
 الـ Endpoint تحديداً (صفحات توثيق RapidAPI تحجب الجلب الآلي دون تسجيل
-دخول). دالة fetch_live_matches تتعامل مع أشيع أشكال الأغلفة الممكنة
-(response/data/result/matches)، وsync_data.py يطبع مفاتيح أول سجل خام
-في كل تشغيل — استخدمها إن احتجت تصحيح أسماء الحقول لاحقاً.
+دخول). دالة fetch_live_matches لا تفترض عمقاً أو غلافاً ثابتاً — تبحث في
+كامل بنية الاستجابة (بغضّ النظر عن عمق التداخل، بما فيه حالة التجميع حسب
+الدوري) عن القائمة التي تحتوي فعلاً سجلات تشبه مباريات (مفاتيح مثل
+homeTeam/awayTeam/goals). إن فشل هذا التخمين، الخطأ الناتج يطبع خريطة
+كاملة لبنية الاستجابة (بدون قيم حساسة) تكفي لتصحيح المنطق دفعة واحدة.
 """
 import requests
 
@@ -22,6 +24,15 @@ class RapidApiFootballError(Exception):
     pass
 
 
+# مفاتيح "تلمّح" أن الـ dict هو سجل مباراة فعلي (وليس مجموعة/دوري/غلاف) —
+# التطابق غير حساس لحالة الأحرف. يكفي وجود مفتاح واحد منها.
+_MATCH_SIGNAL_KEYS = {
+    'hometeam', 'awayteam', 'home_team', 'away_team', 'home', 'away', 'teams',
+    'homescore', 'awayscore', 'home_score', 'away_score', 'goals', 'score',
+    'fixture', 'matchid', 'match_id',
+}
+
+
 def fetch_live_matches(api_key, timeout=15):
     response = requests.get(
         LIVE_MATCHES_URL,
@@ -31,16 +42,76 @@ def fetch_live_matches(api_key, timeout=15):
     response.raise_for_status()
     payload = response.json()
 
-    if isinstance(payload, list):
-        return payload
-
-    if isinstance(payload, dict):
-        for key in ('response', 'data', 'result', 'matches'):
-            value = payload.get(key)
-            if isinstance(value, list):
-                return value
+    matches = _find_matches_list(payload)
+    if matches:
+        return matches
 
     raise RapidApiFootballError(
         'شكل استجابة غير متوقع من free-api-live-football-data — '
-        f'المفاتيح الموجودة: {list(payload) if isinstance(payload, dict) else type(payload).__name__}'
+        f'خريطة الحقول الكاملة: {_describe_shape(payload)}'
     )
+
+
+def _looks_like_match(node):
+    if not isinstance(node, dict):
+        return False
+    keys = {str(k).lower() for k in node.keys()}
+    return bool(keys & _MATCH_SIGNAL_KEYS)
+
+
+def _collect_lists_by_key(node, key_name=None, out=None):
+    """
+    يجمع كل القوائم (عناصرها dict) الموجودة في أي عمق، مُصنَّفة حسب اسم
+    المفتاح الذي وُجدت تحته — بما يشمل تجميع نفس المفتاح المتكرر عبر عدة
+    مجموعات (مثال شائع: قائمة دوريات، كل دوري بداخله matches خاصة به —
+    التجميع هنا يدمج matches كل الدوريات معاً بدل أخذ أول دوري فقط).
+    """
+    if out is None:
+        out = {}
+    if isinstance(node, list):
+        if node and isinstance(node[0], dict):
+            out.setdefault(key_name or '$root', []).extend(node)
+        for item in node:
+            _collect_lists_by_key(item, key_name, out)
+    elif isinstance(node, dict):
+        for key, value in node.items():
+            _collect_lists_by_key(value, key, out)
+    return out
+
+
+def _find_matches_list(payload):
+    """
+    بدل افتراض عمق/مفتاح ثابت (سبب فشل المحاولة الأولى: البيانات كانت
+    متداخلة أعمق من response مباشرة)، نجمع كل القوائم المرشَّحة أياً كان
+    عمقها، ثم نختار المجموعة التي تحتوي أكبر عدد من العناصر "تبدو كمباراة
+    فعلاً" (مفاتيح مثل homeTeam/awayTeam/goals...) — وليس أي قائمة عناصرها
+    dict بالصدفة (قد تكون قائمة دوريات أو بطولات لا مباريات).
+    """
+    grouped = _collect_lists_by_key(payload)
+    if not grouped:
+        return None
+
+    scored = sorted(
+        (
+            (sum(1 for item in items if _looks_like_match(item)), items)
+            for items in grouped.values()
+        ),
+        key=lambda pair: pair[0],
+        reverse=True,
+    )
+    best_score, best_items = scored[0]
+    return best_items if best_score > 0 else None
+
+
+def _describe_shape(node, path='$', depth=0, max_depth=4):
+    """يبني وصفاً مختصراً لبنية الاستجابة (بدون قيم فعلية) لتسهيل تشخيص
+    أي فشل مستقبلي في تخمين مكان القائمة دفعة واحدة."""
+    if depth >= max_depth:
+        return f'{path}: ...'
+    if isinstance(node, dict):
+        parts = [_describe_shape(v, f'{path}.{k}', depth + 1, max_depth) for k, v in node.items()]
+        return '; '.join(parts)
+    if isinstance(node, list):
+        sample = _describe_shape(node[0], f'{path}[0]', depth + 1, max_depth) if node else ''
+        return f'{path}: list(len={len(node)}) {sample}'
+    return f'{path}: {type(node).__name__}'
