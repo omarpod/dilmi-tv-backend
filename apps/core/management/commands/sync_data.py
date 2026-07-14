@@ -56,6 +56,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime as django_parse_datetime
 
+from apps.core.integrations.push_notifications import send_topic_notification
 from apps.core.integrations.rapidapi_football import fetch_live_matches, fetch_matches_by_date
 from apps.core.integrations.rss_news import extract_image_url, extract_plain_text, fetch_entries
 from apps.core.models import Match, News
@@ -188,6 +189,8 @@ class Command(BaseCommand):
                 },
             )
 
+            was_live_already = match.status == Match.Status.LIVE
+
             match.home_team = home_team
             match.away_team = away_team
             match.home_score = _dig(raw, 'goals.home', 'score.home', 'homeScore', 'home_score') or 0
@@ -197,6 +200,16 @@ class Command(BaseCommand):
             match.status = Match.Status.LIVE
             match.save()
             synced += 1
+
+            if not was_live_already:
+                # إشعار فقط عند "الانتقال" لمباشرة (وليس عند كل تحديث نتيجة
+                # لمباراة مباشرة أصلاً) — وإلا لأزعجنا المستخدمين كل 15 دقيقة
+                send_topic_notification(
+                    topic='match_live',
+                    title='مباشر الآن',
+                    body=f'{home_team} vs {away_team}',
+                    data={'match_id': external_id},
+                )
 
         # أي مباراة كانت "مباشرة" في تشغيل سابق ولم تعد ضمن القائمة الآن
         # = انتهت فعلياً (هذا الـ Endpoint يُرجع المباريات المباشرة فقط،

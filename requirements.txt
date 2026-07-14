@@ -24,3 +24,7 @@ cloudinary==1.41.0
 # سحب الأخبار من RSS (يُستدعى من sync_data.py)
 feedparser==6.0.11
 requests==2.32.3
+
+# إشعارات Push للتطبيق (Firebase Cloud Messaging) — عند بدء مباراة مباشرة
+# أو عند نشر تحديث جديد للتطبيق
+firebase-admin==6.6.0

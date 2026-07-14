@@ -38,7 +38,7 @@ def _get(url, api_key, params=None, timeout=15):
 
 def _extract_or_raise(payload, source_label):
     matches = _find_matches_list(payload)
-    if matches:
+    if matches is not None:
         return matches
     raise RapidApiFootballError(
         f'شكل استجابة غير متوقع من {source_label} — '
@@ -75,15 +75,16 @@ def _looks_like_match(node):
 
 def _collect_lists_by_key(node, key_name=None, out=None):
     """
-    يجمع كل القوائم (عناصرها dict) الموجودة في أي عمق، مُصنَّفة حسب اسم
-    المفتاح الذي وُجدت تحته — بما يشمل تجميع نفس المفتاح المتكرر عبر عدة
-    مجموعات (مثال شائع: قائمة دوريات، كل دوري بداخله matches خاصة به —
-    التجميع هنا يدمج matches كل الدوريات معاً بدل أخذ أول دوري فقط).
+    يجمع كل القوائم الموجودة في أي عمق (بما فيها الفارغة — رد بلا مباريات
+    اليوم شكل صالح تماماً وليس خطأً)، مُصنَّفة حسب اسم المفتاح الذي وُجدت
+    تحته — بما يشمل تجميع نفس المفتاح المتكرر عبر عدة مجموعات (مثال شائع:
+    قائمة دوريات، كل دوري بداخله matches خاصة به — التجميع هنا يدمج
+    matches كل الدوريات معاً بدل أخذ أول دوري فقط).
     """
     if out is None:
         out = {}
     if isinstance(node, list):
-        if node and isinstance(node[0], dict):
+        if not node or isinstance(node[0], dict):
             out.setdefault(key_name or '$root', []).extend(node)
         for item in node:
             _collect_lists_by_key(item, key_name, out)
@@ -100,6 +101,10 @@ def _find_matches_list(payload):
     عمقها، ثم نختار المجموعة التي تحتوي أكبر عدد من العناصر "تبدو كمباراة
     فعلاً" (مفاتيح مثل homeTeam/awayTeam/goals...) — وليس أي قائمة عناصرها
     dict بالصدفة (قد تكون قائمة دوريات أو بطولات لا مباريات).
+
+    ترجع None فقط إن لم توجد أي قائمة على الإطلاق في الاستجابة (شكل غير
+    مفهوم كلياً، يستحق رفع خطأ)؛ ترجع [] لرد لا يحتوي مباريات اليوم (حالة
+    صالحة وشائعة)، وليس فقط للقوائم غير الفارغة.
     """
     grouped = _collect_lists_by_key(payload)
     if not grouped:
@@ -114,7 +119,14 @@ def _find_matches_list(payload):
         reverse=True,
     )
     best_score, best_items = scored[0]
-    return best_items if best_score > 0 else None
+    if best_score > 0:
+        return best_items
+    # لا شيء يبدو كمباراة — لكن إن كانت إحدى القوائم المرشَّحة فارغة أصلاً
+    # (وليست قائمة دوريات/بطولات غير فارغة لا تشبه مباريات)، فهذه على
+    # الأرجح استجابة صحيحة تعني ببساطة "لا مباريات"
+    if any(len(items) == 0 for items in grouped.values()):
+        return []
+    return None
 
 
 def _describe_shape(node, path='$', depth=0, max_depth=4):
