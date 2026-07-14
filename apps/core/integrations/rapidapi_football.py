@@ -18,10 +18,32 @@ import requests
 
 RAPIDAPI_HOST = 'free-api-live-football-data.p.rapidapi.com'
 LIVE_MATCHES_URL = f'https://{RAPIDAPI_HOST}/football-current-live'
+MATCHES_BY_DATE_URL = f'https://{RAPIDAPI_HOST}/football-get-matches-by-date'
 
 
 class RapidApiFootballError(Exception):
     pass
+
+
+def _get(url, api_key, params=None, timeout=15):
+    response = requests.get(
+        url,
+        params=params,
+        headers={'x-rapidapi-key': api_key, 'x-rapidapi-host': RAPIDAPI_HOST},
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()
+
+
+def _extract_or_raise(payload, source_label):
+    matches = _find_matches_list(payload)
+    if matches:
+        return matches
+    raise RapidApiFootballError(
+        f'شكل استجابة غير متوقع من {source_label} — '
+        f'خريطة الحقول الكاملة: {_describe_shape(payload)}'
+    )
 
 
 # مفاتيح "تلمّح" أن الـ dict هو سجل مباراة فعلي (وليس مجموعة/دوري/غلاف) —
@@ -34,22 +56,14 @@ _MATCH_SIGNAL_KEYS = {
 
 
 def fetch_live_matches(api_key, timeout=15):
-    response = requests.get(
-        LIVE_MATCHES_URL,
-        headers={'x-rapidapi-key': api_key, 'x-rapidapi-host': RAPIDAPI_HOST},
-        timeout=timeout,
-    )
-    response.raise_for_status()
-    payload = response.json()
+    payload = _get(LIVE_MATCHES_URL, api_key, timeout=timeout)
+    return _extract_or_raise(payload, 'football-current-live')
 
-    matches = _find_matches_list(payload)
-    if matches:
-        return matches
 
-    raise RapidApiFootballError(
-        'شكل استجابة غير متوقع من free-api-live-football-data — '
-        f'خريطة الحقول الكاملة: {_describe_shape(payload)}'
-    )
+def fetch_matches_by_date(api_key, date_str, timeout=15):
+    """date_str بصيغة YYYYMMDD (مثال: 20241107) — كما في المثال الذي زوّدتنا به."""
+    payload = _get(MATCHES_BY_DATE_URL, api_key, params={'date': date_str}, timeout=timeout)
+    return _extract_or_raise(payload, 'football-get-matches-by-date')
 
 
 def _looks_like_match(node):
