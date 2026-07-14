@@ -10,7 +10,10 @@
 {% block body %}
 <div class="layout">
   <aside class="sidebar">
-    <div class="brand"><span class="dot"></span> Dilmi TV</div>
+    <div class="brand">
+      {% if site_logo_url %}<img src="{{ site_logo_url }}" alt="Dilmi TV" style="height:28px; width:auto;">
+      {% else %}<span class="dot"></span> Dilmi TV{% endif %}
+    </div>
     <nav>
       <a href="{% url 'dashboard:index' %}" class="{% block nav_dashboard %}{% endblock %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg>

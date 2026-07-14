@@ -30,17 +30,18 @@ def _apply_admin_theme(sender, **kwargs):
         return
 
     theme, _created = Theme.objects.get_or_create(name='Dilmi TV', defaults=colors)
-    if not _created:
-        # نُحدّث الألوان في كل مرة (وليس فقط عند الإنشاء الأول) حتى تنعكس
-        # أي تعديلات مستقبلية على DILMI_THEME_COLORS دون تدخل يدوي بالضغط
-        for field, value in colors.items():
-            setattr(theme, field, value)
-        theme.save()
+    # نُطبِّق الألوان الافتراضية *مرة واحدة فقط* عند الإنشاء الأول. لو طبّقناها
+    # في كل migrate (كما كان سابقاً)، أي تخصيص يدوي لاحق من طرف الفريق —
+    # مثل رفع شعار (logo) من واجهة /admin/admin_interface/theme/ — كان
+    # سيُمحى تلقائياً عند أول Deploy تالٍ لأن post_migrate يُعيد ضبط القيم
+    # من DILMI_THEME_COLORS في كل مرة. الآن: بعد الإنشاء الأول، الثيم مملوك
+    # بالكامل لواجهة الإدارة، ولا نلمسه برمجياً مجدداً.
 
-    # نُفعّلها كثيم نشِط فعلياً (وليس فقط موجودة في القائمة)
-    Theme.objects.update(active=False)
-    theme.active = True
-    theme.save()
+    # نُفعّلها كثيم نشِط فعلياً (وليس فقط موجودة في القائمة) — هذا فقط، دائماً
+    if not theme.active:
+        Theme.objects.update(active=False)
+        theme.active = True
+        theme.save(update_fields=['active'])
 
 
 def _install_dashboard():

@@ -15,8 +15,11 @@ django-colorfield==0.11.0
 whitenoise==6.7.0
 gunicorn==22.0.0
 
-# الصور
+# الصور + التخزين الدائم على Cloudinary (Railway لا يحتفظ بالملفات المرفوعة
+# بين عمليات النشر — أي تخزين محلي على القرص يُفقد عند كل Deploy جديد)
 Pillow==12.3.0
+django-cloudinary-storage==0.3.0
+cloudinary==1.41.0
 
 # سحب الأخبار من RSS (يُستدعى من sync_data.py)
 feedparser==6.0.11

@@ -72,7 +72,22 @@ def get_dashboard_context():
         'live_matches': live_matches,
         'upcoming_matches': upcoming_matches,
         'donut': _build_donut(live_threshold),
+        'site_logo_url': _get_site_logo_url(),
     }
+
+
+def _get_site_logo_url():
+    """
+    مصدر الشعار الموحّد بين /admin/ و/dashboard/: نفس الشعار الذي يُرفع من
+    /admin/admin_interface/theme/ (حقل Logo) — بدون تكرار آلية رفع صور
+    منفصلة لكل واجهة.
+    """
+    from admin_interface.models import Theme
+
+    theme = Theme.objects.filter(active=True).first()
+    if theme and theme.logo:
+        return theme.logo.url
+    return None
 
 
 def _build_sparkline_svg(values, width=180, height=40):

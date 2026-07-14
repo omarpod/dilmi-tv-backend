@@ -62,7 +62,13 @@ INSTALLED_APPS = [
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
+
+    # cloudinary_storage يجب أن يكون قبل django.contrib.staticfiles مباشرة
+    # (شرط موثَّق رسمياً من المكتبة) — تخزين دائم للصور المرفوعة، لأن قرص
+    # Railway يُمسح بالكامل عند كل عملية نشر (Ephemeral Filesystem)
+    'cloudinary_storage',
     'django.contrib.staticfiles',
+    'cloudinary',
 
     'rest_framework',
     'corsheaders',
@@ -158,8 +164,24 @@ CACHES = {
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
+# التخزين الدائم للصور المرفوعة (Cloudinary) — بدونه، أي صورة يرفعها فريقك
+# عبر /admin/ تُفقد نهائياً عند أول Deploy تالٍ لأن قرص Railway لا يُبقي أي
+# شيء بين عمليات النشر. محلياً (بدون متغيرات Cloudinary) نرجع تلقائياً لتخزين
+# القرص العادي حتى لا يحتاج التطوير المحلي حساب Cloudinary.
+_cloudinary_configured = bool(os.environ.get('CLOUDINARY_CLOUD_NAME'))
+
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY'),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET'),
+}
+
 STORAGES = {
-    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'default': {
+        'BACKEND': 'cloudinary_storage.storage.MediaCloudinaryStorage'
+        if _cloudinary_configured
+        else 'django.core.files.storage.FileSystemStorage',
+    },
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
 }
 WHITENOISE_USE_FINDERS = True
