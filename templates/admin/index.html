@@ -1,0 +1,181 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static %}
+
+{% block extrastyle %}{{ block.super }}
+<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">
+<style>
+  #dilmi-dashboard {
+    --bg: #0B1220;
+    --panel: #141C2E;
+    --panel-border: #24304a;
+    --text: #FFFFFF;
+    --muted: #93a2c0;
+    --accent: #B6FF3C;
+  }
+  #dilmi-dashboard { margin-bottom: 30px; }
+  #dilmi-dashboard .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  #dilmi-dashboard .stat-card {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    color: var(--text);
+  }
+  #dilmi-dashboard .stat-card .label {
+    color: var(--muted);
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+  #dilmi-dashboard .stat-card .value {
+    font-size: 30px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+  }
+  #dilmi-dashboard .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-border);
+    border-radius: 14px;
+    padding: 20px;
+    color: var(--text);
+  }
+  #dilmi-dashboard .panel h2 {
+    color: var(--text);
+    font-size: 16px;
+    margin: 0 0 14px;
+  }
+  #dilmi-dashboard table.live-matches {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  #dilmi-dashboard table.live-matches th {
+    text-align: {% if LANGUAGE_BIDI %}right{% else %}left{% endif %};
+    color: var(--muted);
+    font-weight: 500;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--panel-border);
+  }
+  #dilmi-dashboard table.live-matches td {
+    padding: 10px;
+    border-bottom: 1px solid var(--panel-border);
+    color: var(--text);
+  }
+  #dilmi-dashboard .badge-live {
+    background: var(--accent);
+    color: var(--bg);
+    font-weight: 700;
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+  }
+  #dilmi-dashboard .empty {
+    color: var(--muted);
+    padding: 10px 0;
+  }
+  #dilmi-dashboard a.edit-link {
+    color: var(--accent);
+    font-weight: 600;
+    text-decoration: none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="dilmi-dashboard">
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="label">{% translate 'إجمالي المباريات' %}</div>
+      <div class="value">{{ dashboard.stats.total_matches }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">{% translate 'مباشر الآن' %}</div>
+      <div class="value">{{ dashboard.stats.live_now }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">{% translate 'القنوات النشِطة' %}</div>
+      <div class="value">{{ dashboard.stats.active_channels }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">{% translate 'الأخبار المنشورة' %}</div>
+      <div class="value">{{ dashboard.stats.published_news }}</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>{% translate 'إدارة المباريات المباشرة' %}</h2>
+    {% if dashboard.live_matches %}
+    <table class="live-matches">
+      <thead>
+        <tr>
+          <th>{% translate 'المباراة' %}</th>
+          <th>{% translate 'البطولة' %}</th>
+          <th>{% translate 'النتيجة' %}</th>
+          <th>{% translate 'الدقيقة' %}</th>
+          <th>{% translate 'القناة' %}</th>
+          <th>{% translate 'الحالة' %}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for match in dashboard.live_matches %}
+        <tr>
+          <td>{{ match.home_team }} vs {{ match.away_team }}</td>
+          <td>{{ match.competition|default:"—" }}</td>
+          <td>{{ match.home_score }} - {{ match.away_score }}</td>
+          <td>{{ match.elapsed_minutes }}'</td>
+          <td>{{ match.channel.name|default:"—" }}</td>
+          <td><span class="badge-live">{% translate 'مباشر' %}</span></td>
+          <td><a class="edit-link" href="{% url 'admin:core_match_change' match.pk %}">{% translate 'تعديل' %}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">{% translate 'لا توجد مباريات مباشرة حالياً.' %}</p>
+    {% endif %}
+  </div>
+</div>
+
+<div id="content-main">
+  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
+</div>
+{% endblock %}
+
+{% block sidebar %}
+<div id="content-related">
+    <div class="module" id="recent-actions-module">
+        <h2>{% translate 'Recent actions' %}</h2>
+        <h3>{% translate 'My actions' %}</h3>
+            {% load log %}
+            {% get_admin_log 10 as admin_log for_user user %}
+            {% if not admin_log %}
+            <p>{% translate 'None available' %}</p>
+            {% else %}
+            <ul class="actionlist">
+            {% for entry in admin_log %}
+            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
+                <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
+                {% if entry.is_deletion or not entry.get_admin_url %}
+                    {{ entry.object_repr }}
+                {% else %}
+                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
+                {% endif %}
+                <br>
+                {% if entry.content_type %}
+                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
+                {% else %}
+                    <span class="mini quiet">{% translate 'Unknown content' %}</span>
+                {% endif %}
+            </li>
+            {% endfor %}
+            </ul>
+            {% endif %}
+    </div>
+</div>
+{% endblock %}

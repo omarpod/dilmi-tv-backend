@@ -18,6 +18,8 @@ class CoreConfig(AppConfig):
         from django.db.models.signals import post_migrate
         post_migrate.connect(_apply_admin_theme, sender=self)
 
+        _install_dashboard()
+
 
 def _apply_admin_theme(sender, **kwargs):
     from django.conf import settings
@@ -39,3 +41,43 @@ def _apply_admin_theme(sender, **kwargs):
     Theme.objects.update(active=False)
     theme.active = True
     theme.save()
+
+
+def _install_dashboard():
+    """
+    يُلحِق إحصائيات حيّة (عدد المباريات، المباشرة الآن، القنوات، الأخبار)
+    بصفحة /admin/ الرئيسية، ليقرأها templates/admin/index.html.
+
+    لماذا Monkey-patch لـ AdminSite.index بدل إنشاء AdminSite مخصَّص:
+    admin.site هو الكائن الوحيد (singleton) الذي يستخدمه @admin.register
+    في كل الملفات (admin.py) — استبداله بكائن آخر يتطلب إعادة تسجيل كل
+    النماذج يدوياً. تعديل الدالة المرتبطة به مباشرة أبسط وأكثر أماناً هنا.
+    """
+    from django.contrib import admin
+    from django.contrib.admin.sites import AdminSite
+
+    original_index = AdminSite.index
+
+    def index_with_dashboard(self, request, extra_context=None):
+        extra_context = extra_context or {}
+        extra_context['dashboard'] = _dashboard_context()
+        return original_index(self, request, extra_context)
+
+    admin.site.index = index_with_dashboard.__get__(admin.site, AdminSite)
+
+
+def _dashboard_context():
+    from .models import Channel, Match, News
+
+    matches = Match.objects.select_related('channel')
+    live_matches = matches.filter(status='live').order_by('-elapsed_minutes')[:8]
+
+    return {
+        'stats': {
+            'total_matches': matches.count(),
+            'live_now': matches.filter(status='live').count(),
+            'active_channels': Channel.objects.filter(is_active=True).count(),
+            'published_news': News.objects.filter(is_published=True).count(),
+        },
+        'live_matches': live_matches,
+    }
