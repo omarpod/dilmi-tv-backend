@@ -21,19 +21,9 @@ SECRET_KEY = os.environ.get(
 
 DEBUG = os.environ.get('DEBUG', 'False') == 'True'
 
-RAILWAY_PUBLIC_DOMAIN = os.environ.get('RAILWAY_PUBLIC_DOMAIN')
-
-ALLOWED_HOSTS = ['localhost', '127.0.0.1']
-CSRF_TRUSTED_ORIGINS = []
-
-if RAILWAY_PUBLIC_DOMAIN:
-    ALLOWED_HOSTS.append(RAILWAY_PUBLIC_DOMAIN)
-    CSRF_TRUSTED_ORIGINS.append(f'https://{RAILWAY_PUBLIC_DOMAIN}')
-
-_extra_hosts = os.environ.get('ADDITIONAL_ALLOWED_HOSTS', '')
-for _host in filter(None, (h.strip() for h in _extra_hosts.split(','))):
-    ALLOWED_HOSTS.append(_host)
-    CSRF_TRUSTED_ORIGINS.append(f'https://{_host}')
+# تم تعديل هذا القسم ليقبل الدومين الخاص بك وأي طلب آخر لضمان عدم حدوث DisallowedHost
+ALLOWED_HOSTS = ['*', 'localhost', '127.0.0.1', 'brina.site', 'www.brina.site']
+CSRF_TRUSTED_ORIGINS = ['https://brina.site', 'https://www.brina.site']
 
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
@@ -145,7 +135,7 @@ CACHES = {
 }
 
 # =============================================================================
-# الملفات الثابتة والوسائط (تم التعديل هنا)
+# الملفات الثابتة والوسائط
 # =============================================================================
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
