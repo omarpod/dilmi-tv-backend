@@ -1,0 +1,23 @@
+# Django وDjango REST Framework
+Django==5.0.6
+djangorestframework==3.15.1
+django-cors-headers==4.3.1
+
+# قاعدة بيانات PostgreSQL (Railway) + قراءة DATABASE_URL
+dj-database-url==2.2.0
+psycopg[binary]==3.2.10
+
+# لوحة تحكم احترافية قابلة للتخصيص من الواجهة نفسها (ألوان، شعار)
+django-admin-interface==0.29.4
+django-colorfield==0.11.0
+
+# خدمة الملفات الثابتة في الإنتاج (بدون Nginx منفصل)
+whitenoise==6.7.0
+gunicorn==22.0.0
+
+# الصور
+Pillow==12.3.0
+
+# سحب الأخبار من RSS (يُستدعى من sync_data.py)
+feedparser==6.0.11
+requests==2.32.3

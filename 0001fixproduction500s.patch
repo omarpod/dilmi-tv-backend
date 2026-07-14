@@ -1,0 +1,1175 @@
+From 5b59841a0b2c62235557c39f94e8e91e5d13f223 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Tue, 14 Jul 2026 00:16:07 +0000
+Subject: [PATCH] Fix production 500s: add missing core migrations, harden
+ admin/security/logging
+
+Root cause of the /admin/core/match/ 500 error: the core app had zero
+migration files, so core_match/core_channel/core_news never existed in
+Postgres. Added the initial migration.
+
+Also:
+- Wire ADMIN_SITE_HEADER/TITLE/INDEX_TITLE into admin.site (previously
+  dead settings that were never applied)
+- Add explicit console LOGGING so request errors show up in Railway
+  deploy logs instead of silently going to mail_admins
+- Add production security settings (SSL redirect, secure cookies, HSTS)
+  gated on DEBUG so local dev is unaffected
+- Add ensure_superuser management command driven by DJANGO_SUPERUSER_*
+  env vars, wired into railway.json's start command, so an admin
+  account can be provisioned without needing Railway's console shell
+- Brand the admin-interface theme (title, logo) and add a custom
+  admin/index.html dashboard: live stat cards (matches, live now,
+  channels, news) and a live-match management table over real data
+- Add .gitignore and stop tracking committed __pycache__ files
+---
+ .gitignore                                    |  20 ++
+ __pycache__/manage.cpython-312.pyc            | Bin 934 -> 0 bytes
+ .../core/__pycache__/__init__.cpython-312.pyc | Bin 120 -> 0 bytes
+ apps/core/__pycache__/admin.cpython-312.pyc   | Bin 1546 -> 0 bytes
+ apps/core/__pycache__/apps.cpython-312.pyc    | Bin 2197 -> 0 bytes
+ apps/core/__pycache__/models.cpython-312.pyc  | Bin 8942 -> 0 bytes
+ .../__pycache__/serializers.cpython-312.pyc   | Bin 2411 -> 0 bytes
+ apps/core/__pycache__/urls.cpython-312.pyc    | Bin 630 -> 0 bytes
+ apps/core/__pycache__/views.cpython-312.pyc   | Bin 3135 -> 0 bytes
+ apps/core/apps.py                             |  42 +++
+ .../__pycache__/__init__.cpython-312.pyc      | Bin 131 -> 0 bytes
+ .../__pycache__/__init__.cpython-312.pyc      | Bin 140 -> 0 bytes
+ .../__pycache__/sync_data.cpython-312.pyc     | Bin 5476 -> 0 bytes
+ .../management/commands/ensure_superuser.py   |  50 +++
+ apps/core/migrations/0001_initial.py          | 288 ++++++++++++++++++
+ .../__pycache__/__init__.cpython-312.pyc      | Bin 131 -> 0 bytes
+ config/settings.py                            |  46 +++
+ config/urls.py                                |   6 +
+ railway.json                                  |   2 +-
+ templates/admin/index.html                    | 181 +++++++++++
+ 20 files changed, 634 insertions(+), 1 deletion(-)
+ create mode 100644 .gitignore
+ delete mode 100644 __pycache__/manage.cpython-312.pyc
+ delete mode 100644 apps/core/__pycache__/__init__.cpython-312.pyc
+ delete mode 100644 apps/core/__pycache__/admin.cpython-312.pyc
+ delete mode 100644 apps/core/__pycache__/apps.cpython-312.pyc
+ delete mode 100644 apps/core/__pycache__/models.cpython-312.pyc
+ delete mode 100644 apps/core/__pycache__/serializers.cpython-312.pyc
+ delete mode 100644 apps/core/__pycache__/urls.cpython-312.pyc
+ delete mode 100644 apps/core/__pycache__/views.cpython-312.pyc
+ delete mode 100644 apps/core/management/__pycache__/__init__.cpython-312.pyc
+ delete mode 100644 apps/core/management/commands/__pycache__/__init__.cpython-312.pyc
+ delete mode 100644 apps/core/management/commands/__pycache__/sync_data.cpython-312.pyc
+ create mode 100644 apps/core/management/commands/ensure_superuser.py
+ create mode 100644 apps/core/migrations/0001_initial.py
+ delete mode 100644 apps/core/migrations/__pycache__/__init__.cpython-312.pyc
+ create mode 100644 templates/admin/index.html
+
+diff --git a/.gitignore b/.gitignore
+new file mode 100644
+index 0000000..356e249
+--- /dev/null
++++ b/.gitignore
+@@ -0,0 +1,20 @@
++__pycache__/
++*.pyc
++*.pyo
++*.pyd
++
++.venv/
++venv/
++env/
++
++db.sqlite3
++db.sqlite3-journal
++
++staticfiles/
++media/
++
++.env
++.env.*
++
++.DS_Store
++*.log
+diff --git a/__pycache__/manage.cpython-312.pyc b/__pycache__/manage.cpython-312.pyc
+deleted file mode 100644
+index 769071526eb80a718553516585dc3ddd81e3a383..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 934
+zcmYjP&1(}u6o0cjn<nX(l3Ga*GN6#=5<xulAeLa#FElMQMVia9?o8vx{V21Ov<a=K
+zDEc21p&)pZ{sZ2mXD?M0aa#}K$y;naNWD0dCbbXdeg58?H*eni!NDX*%GQ=@1r6Yb
+zGI}KK4joNMu>}+=KoQkkR6!l7RWzzUg^JEF#Sg{-cw7Uf?{w1;G_|IdHChSJ@~tY%
+ztu}wEP|5BBIs!|s%X9QrvMmrDr((6<^`{=`GtL-YRkgCy#Ue-m)hTv$4{rhj4K_dw
+z^m1xLJ?+2TK_|Lw7A}M63`2RY06)KpM1K!SjUI9XJ<%v^qK9Y=t--p!3~MMGD@CJ)
+zxqNAQ-drq}%d@5FMf1*lVd-|UHEaj|ic`&nObExXhFtZUMNyiqGrKOBxxxd_v;$90
+ziJGqCv)1;lpzcyXBZ%Xz23(Lr&GM^3j^sHb&7e-gx>OvI35nx}!g5_kiOeQe!*X2f
+zp36w!D<CHe%jKE*(n7vGLzv%ic;I`?7o=fvN8u((!J(a!D*>-EK}0|-TR06%Fk%sz
+zAnKNTHgz%^kF+3+`nu(!q<k1<D^}eV(I`D>)DAeyo&37Gj;n8r`e!?jDRLh0NDrG~
+zge_ieWVMs9&erWv&4!TU{@m5mor$n#IX)kjkv@6CyOKSE0~~uk_jv9LPJh7Zy|HV1
+z*NdO<R9ovaQs3f*UqfJA+O}Wae|i5i&iwg32m==n!7x$>L+Q4r4Ne^CcsSXP!?{#D
+zffK2}ZCwVB!wa(Z>)0f`OXSn~ZhRm=qVJ9vQjg-MsoF5jtP%B@CJk)U<S_~7YDGHT
+zDU5G<%rxJ?k#quA`*s|^;RUqrvYT90SL+sLBx~ykq3<xf4~cz99>$VrygdeZ;6>}B
+Sp8ksC&!*Zs;4wZTvHt+71?7MM
+
+diff --git a/apps/core/__pycache__/__init__.cpython-312.pyc b/apps/core/__pycache__/__init__.cpython-312.pyc
+deleted file mode 100644
+index 2e96c8e08e5cf800687129bdf06caf67cf3bda6b..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 120
+zcmX@j%ge<81fH3pSs?l`h(HIQS%4zb87dhx8U0o=6fpsLpFwJViR<Yn78DfgC+8QX
+t>c_`t=4F<|$LkeT{^GF7%}*)KNwq6t1*&5N;$jfvBQql-V-Yiu1po|%7oh+E
+
+diff --git a/apps/core/__pycache__/admin.cpython-312.pyc b/apps/core/__pycache__/admin.cpython-312.pyc
+deleted file mode 100644
+index 97d9324b588d52608ee4ec1b3fab9680abc47da0..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 1546
+zcmbVMOK%%D5GMC2tse11a-6m?95_wA31Fj#+?oPK4++p%w_Nr@&`ZWzV^^z?s|3nP
+z1`PD-OOfAD_^0G#_+XbnfdV}QxharOIdx_w!EuumL3tR?ki(BV-+bKHjYdFVoF`BA
+zpV@@`jlq0)GiP#}67q@&5)na#mD0?LEJ}neoYc;o$jRKu&AiB?#3It#Z_WWOXXzXR
+z1`dlnB*Hx;!h_6(>Dq_(7`_6>@pK|l^|P4n6-*y6D_@8id=}HYf>{O3;0rNp!&+E>
+zxy1W@y&dODZgY_(y{-Q6Emjgz<CY6=k%!PW{?A?B>&eu(JG_Xy#_7lxI-V6>PBX&D
+z<QoWI5lJEnEwBWQY+*%?up?JEkvDWh&(vpVKjEFBW1Jq(q^ZQbkbAirnrfmMkBj8F
+zG;XehRH3D60ITX?z{g27(5DIo(FuK1VGL0iGXY~+E(R(3b;h0zcskpur-?3@NOV8t
+zLsKiGr%75!Wg2B5MN;tHRGNmCT*Y1XG?A&$zmo~vLf*Hwwm&9JRbi_%J~(;>%pv(}
+z`N8P%`O>}7FXyehqn-2C&4V3<TV>+^CN3!1pVH<VpD|r1sInI4Szi`Ok>ow&>4Fyn
+zZGvtNbZBg@3HS>>ocY&e%KKUh2HXz{sf`~`dkbV@@1Wb&@@OG>W~${$bk*0eX_^`K
+zp9yGHkz^8>SNMR`H8l7@)FPTCG%YZuiK(ocNQHzBRU3CoCa$A*V{Q;Ye+A}{j2*k>
+zjUJCHWO)q<d;kQtzdh(okKu_=6SxXHpH|+`30+e~&CVs~0$b4MIw-9_*oEeIr7%IP
+zBz&!4yfA^z2P&3qpi&@a6QDtO-@ycY<-J1oicaYLckTbK^$wg?Xs}F;JfTn?p-?uk
+z&ds?-FsBpNvB4sbp}|eD&wG3M7T&CqU4?%g<AKU$s+9|Y!oQzF0h)@EdmwYrbg+X7
+zWyMpGmSmS-akUHYD?dzM%#Z4OfWW7$e*-hNDW!jq)j!Gl8?t#qHpd>Z7Dnw~*ACW>
+z{8PGmVL5c|=>FOA#>w)=gg`K{iFIR)%j4!{u6s&XE-atkIclFR-a1*lH6ajS?)5P)
+ik6V|y&M9qQST+rh+_Q!ClZEvOfdF$?-r;hof`0(}8eo(F
+
+diff --git a/apps/core/__pycache__/apps.cpython-312.pyc b/apps/core/__pycache__/apps.cpython-312.pyc
+deleted file mode 100644
+index ac239c35d8bcc83e0841f4a0751e49eb10e3534a..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 2197
+zcmah~>ucLq6u+`1TXyVri8D8)>2}Au5r@X5j6x|}plgz?#Yx7RjbS!~YAK#P`7ue(
+za8ST$okt(g6bjwghZRcev`LqiWRLDI80<?zTY4o{DBBq9Tba8L>!+P7SxJ@-c0gD6
+z-t+t&opbb4G#W-gzbo(M{th7YD?NC`H8+jDu(^aJBrz(=GiioFKJ*rnd^IHbWoE(e
+z%B6i0TSIAog-ZnfpjQdT4jnF)juZ={N;cyPxhvB=G+uzsB_yLXBO%ad(tgR8W+i``
+zb8H2uEjxUqsL8IC@!e8REM$vG=|nPLlw?&;zNusnmyP0pBCFDPNGz4~WCrBRF)&T8
+zk|k0nx5;(fr>J=akG!ApeA5tEcxd#EURVGjBl#%82|#EvIS)VZJTf3hE}3Z2zu<HC
+z463jRt~?0GFm94HZJj6Ik$G#*x?r8e<cd|ZW=Y+e#(hUqgGYstxBCbCg(JhM;dhT?
+zatFAlv5T!ol=4cUM=2PxHY#RhOl|=8B;dGaodFAH*M0m_y@-Kz3XFDllX-H7EOmEd
+zIM;Aq$!elOb;(V#1bUDM>n!d9nR#*>Lt<8%i76FzLuiU8$T@7yg2^*vdEJXO1uAur
+zr)jiitZ7nDVz5>t%fOgFgvla!04+T7v785&l=U@ee1idg6+3W*4LFdQNwRFsV8FDr
+z;iX3E*g6Bj&jK84%9<sM@VH@vAHYVFNZkOY74ief)^Hctn5S1RXETgRCyqJ<d4r}G
+zPE$0`)7H#}PX`P*1N-X$At)NhBw4X)NxV5ba8162$fl_~SSU^p`bNOmDY<K4bn~Zb
+z#tFAK;T}*xE~x?Q6ogj?|8TrY6K~BV*W=S@eL)vRHb(*HfG!s#SsO~QcE>aQpexye
+zsOnk}bnRfKSSZLD!)_CxGt`RUehh<tsD#gEby*#CBz5Wv<EOFYKH5V2XbU;JWT|3v
+znk-6{@#i-BFzMWcKu6yNOBMaqhC+u3-~NE_T;n_M?cVo2yUKUo=ig`m8x19bHZKST
+zF)s^(9To)W-Lgve5kdI0EUHaTn<S5lWz`Tw=xAY-wzSPso*fyJwG%~Mc5G<dz~*(N
+zZHJc@r3-CUXQ3Uf?|`L-$j*bSY@D>jt9>NaRZTV6FxTtqQ1O2a0@~Is@HF0m@vvzS
+z_!v4A{HibSpYSutpokqZVc1E?8+{Y3$?8l6nf{zJPCY62oueUcA&E2D#eg?JK7{N~
+za1#MDpdT>V9L2ST7MkZi^idl^j(l)}H(EV0lQV-R@5RHQbL}iLxf~sWTgbBnBksSW
+zeSV7q9HrnQzt9|<kdctd2{c;{{hyZ#N`!~JO6GOhFqA@8hbrcrabdSTI}gWsZ(1jO
+zT03~L`DS701GN0bjG>IlBZ-LJ(ky={^HHsXO2)U0o91sq+ew+htZayeq1nOWi5#?r
+zZb#upC~86m3fhouPBG-XZU-SuM~>CSG1(53OA>IkPOy;(X*@L*_~bKD%j%9(*LWaP
+zREwH!b53_by}LFgn{x}98xz&CtkV+meiGQNUYbjdE^&DDi?CGDLw3(YcJFV|_PGyM
+zUwrM>$ld6n>VVbKO89M$;=3;8FXSJ@_pinG-x~jMU^Tw~Zv6P<aJ7H-pw$w496-BY
+z{wnoF>dT=&5fe(BPR;hu9r!sCo9qAlz~xu&N4g&S;rbCDJs&<DJ{JLbE<7_hIrxC>
+zSYtabbE|B}J@!=++fnVWr3f3EIW~E0D&@2eojG38>7dZ)@6&BR2L(m2(U(v8*WFI<
+k)p~$ID@dmw0{k<~L-f*<z;>p0Zs!vOug0Dj)9R@H1Di^_H2?qr
+
+diff --git a/apps/core/__pycache__/models.cpython-312.pyc b/apps/core/__pycache__/models.cpython-312.pyc
+deleted file mode 100644
+index d78a98d92aa6cfb13908e7103f77fcded0d49126..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 8942
+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
+OdaY=~|8V$clm1@_cp5bT
+
+diff --git a/apps/core/__pycache__/serializers.cpython-312.pyc b/apps/core/__pycache__/serializers.cpython-312.pyc
+deleted file mode 100644
+index cef43c13a42de26f72f5504a663205fc5cd2663f..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 2411
+zcma)7-D@0G6u<Me-`OOaWE&&ah)w7sn-7afp^CO>6zPIQ!H$$+vU8Knc4jBNGfTQ5
+zLLTxEeK9`8NAW=#BJ|&|_|PsDHo4%7K1d$~%|-%w@|-*Sk=>@G7w(z+apugK^ZT81
+ze(mc^5Ey^kpO=_Q$e*}r4XwFo`~-^~ViBEKk|jHmE9<gEEX7hC#Z`6H)pX5`=n;v?
+zWR6(cCb1$^E~Q(BI?p{NT<bBR83oPQIht{y83)b8Ihu)TGM8E#HCI;r>7vKzv`?9B
+zI`$f6{?tnKDSkR9@#LxFrxKniJbGi<ESIUnwVP&8T;^(luKLB$*HA)m#AuAeV~0?p
+zOAruQI46N~@}3+j=t@<|seG_$alY+Cm${}gX^eK6ql&IBL6m=#bge4ql#}c;W~Oe^
+zz|3h}wk@ufO_y@j@s>QE@B>Co*QhXu$BJe^mpoQ2<RUy~7^r3#JYg8FXH^_rrwrq6
+z#dN|OhEQ`2E+GVwMVmU7ze^hULnmWX)6a`2SJ4-i1hp7UKLuiw><?Vn()i%}Uq{#l
+zIAAY<DCAT&h?@+Gq1G|W;!0>?99X<1qOkChKbz!OmbL5BAwe0cqE=Th+t|DbH>a_o
+ziY5Il?;*%AbXB0G09tArEv>3SjQR!a9jrbBp2Q)Xmf@A1YS+hJ6uIFZlOb*?hC$--
+zWe*Su052XlSIug;%(PDpgj7J8X<v8Fl10y5p@ALPUYSRWP3opyq^@BB^nneui1>jS
+zRD7NgR(;F}o)Ff;bw72?6`xv$YnLkl^?@tB7)8KWHjH8fMGsmCEV~F|0A>@d{eh7!
+z?NHV-iEj9xF)g6JgcgLE9@8)51&Tg2jhCC`ApPq7OTVS3H|CDjsFpY+AVNZ*Vi!hj
+zLVN@_-GnG1Q+vi<bFXV>q;tdq!syYe3OSd?ve02k*Ee637en1PLRv&aT4;c&Ljh8+
+z9ME#WHQP0p05#vMup$+F=wkp|fT)Q=l_&yBacc%=;D>2+4t{x1c?D)Wd51B1&C}==
+zTfc^3Qkt{z2P}5Tx>Ul`p25CYC#BPGHSbHUmU2qpl3MxsmAo#qiFLVzZug9{zjG#-
+z&1|24j&EnZBXmV0?EdUL$;kyCW%O=^`T^v}4BR*2xfgI{i3U8gP_Z3||AOy1kVXKK
+z%@r)d8G0|EtZX`lKoQY{PNVwNS>%ehP-1U^F(2bOK0eN{{_!{%47JxrduY<Wc@5wC
+z6vPJEPo}@U`pwn-?AVU;om0<F*0Pg7RG(yLx8@Gso7;Z7K9sKw<?k0C*t_-vch`L~
+zbnS6U|7HHst%tWB-F|o*Hv9dVdjCYNf8ud$LL^fm7wfG8=prBK&>o8ZvS)pWT|xvT
+z%;0xGtG7bDfoCYjVEV6vfcB8eZ+%iv<!h<@lhpLa2gj<cElB@DeP56oF;$xka~j_&
+z<dQsU7?xLrhLvUjfw9P-m92X04ijEQM9cC;|6-zAA$OphV<+o)95xnFRD?_2)#fC2
+zEo_VLvK#O=^2h%e#6OB8NeATO?_}~Xa=At>A4L@Dy7YarK6<4#dgX}V?kJUz65Ds`
+e+1Xll_K3jdXe=pBZhu)HnW>G;{6}CT{^)--vlI9L
+
+diff --git a/apps/core/__pycache__/urls.cpython-312.pyc b/apps/core/__pycache__/urls.cpython-312.pyc
+deleted file mode 100644
+index 54742c1cec5e9aba6c8a654d8bab2806ec8f55b6..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 630
+zcma)(Jx?1!5Qb;(WAA*2u}C6AM;W=XX=sp@6rqiaL<Dio>Eay+?EA2G&sd~_3PmZP
+zi+@5QDEJj=QXx^mN=P7zhz^O4D!bSxq#z`=n0x2dGqW>$f68SK)FIuKZbAUAbW$99
+zB5r>x@dFqHzz8#9k{E$OfSJsS&BO|<#18C)29$sSXdFz+0tcP$OwsJ&%WSk5J#-Gt
+zu}9zu&PAJ*p22xYnfD*};^DqR1>TlloBBEv_4}gH&Nwy(JQnr-*0m;TM3$Ga6Aj}0
+zLpI2fU#sVUnklE>tw(8!@uv+Oe#Bf(y^r$tdXf1p9Eu`w+hbHnXQEVB_j4pLjS`ej
+zqAO8I`(8*ZRkf{}FP$)CSvw46m7~bR4p;Or<Gnh+pG0u|Qqta369}&V3a2_a+NEPg
+zx*Wf32sO8~^jgwau^;8iNX0L>RVduOtT!Glf9E!nj16LZ!{-#Emlmrk+?a%rGnhSx
+zg}=}|hUR6d`h9+zo&w#i>{Rx>QR`@JyK(|=3#T+{9=+DiQsK~%|Fff=#f#}zd%bVH
+J9iLZK?|+*6pacK_
+
+diff --git a/apps/core/__pycache__/views.cpython-312.pyc b/apps/core/__pycache__/views.cpython-312.pyc
+deleted file mode 100644
+index d5ac6e93255b61d51f22816b3e8f4f6a01515273..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 3135
+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
+Xx*AyuHWz};MFJBP-?xHnc4hwpO*1CA
+
+diff --git a/apps/core/apps.py b/apps/core/apps.py
+index 30a680b..b0e4b57 100644
+--- a/apps/core/apps.py
++++ b/apps/core/apps.py
+@@ -18,6 +18,8 @@ class CoreConfig(AppConfig):
+         from django.db.models.signals import post_migrate
+         post_migrate.connect(_apply_admin_theme, sender=self)
+ 
++        _install_dashboard()
++
+ 
+ def _apply_admin_theme(sender, **kwargs):
+     from django.conf import settings
+@@ -39,3 +41,43 @@ def _apply_admin_theme(sender, **kwargs):
+     Theme.objects.update(active=False)
+     theme.active = True
+     theme.save()
++
++
++def _install_dashboard():
++    """
++    يُلحِق إحصائيات حيّة (عدد المباريات، المباشرة الآن، القنوات، الأخبار)
++    بصفحة /admin/ الرئيسية، ليقرأها templates/admin/index.html.
++
++    لماذا Monkey-patch لـ AdminSite.index بدل إنشاء AdminSite مخصَّص:
++    admin.site هو الكائن الوحيد (singleton) الذي يستخدمه @admin.register
++    في كل الملفات (admin.py) — استبداله بكائن آخر يتطلب إعادة تسجيل كل
++    النماذج يدوياً. تعديل الدالة المرتبطة به مباشرة أبسط وأكثر أماناً هنا.
++    """
++    from django.contrib import admin
++    from django.contrib.admin.sites import AdminSite
++
++    original_index = AdminSite.index
++
++    def index_with_dashboard(self, request, extra_context=None):
++        extra_context = extra_context or {}
++        extra_context['dashboard'] = _dashboard_context()
++        return original_index(self, request, extra_context)
++
++    admin.site.index = index_with_dashboard.__get__(admin.site, AdminSite)
++
++
++def _dashboard_context():
++    from .models import Channel, Match, News
++
++    matches = Match.objects.select_related('channel')
++    live_matches = matches.filter(status='live').order_by('-elapsed_minutes')[:8]
++
++    return {
++        'stats': {
++            'total_matches': matches.count(),
++            'live_now': matches.filter(status='live').count(),
++            'active_channels': Channel.objects.filter(is_active=True).count(),
++            'published_news': News.objects.filter(is_published=True).count(),
++        },
++        'live_matches': live_matches,
++    }
+diff --git a/apps/core/management/__pycache__/__init__.cpython-312.pyc b/apps/core/management/__pycache__/__init__.cpython-312.pyc
+deleted file mode 100644
+index 44737e2cf1e30e5998052c8f99913a03691ae424..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 131
+zcmX@j%ge<81fH3pSs?l`h(HIQS%4zb87dhx8U0o=6fpsLpFwJVDe37a78DfgC+8QX
+z>gOirC8nq5rskFC$H!;pWtPOp>lIY~;;_lhPbtkwwJTx;YGDN8Vi4maGb1Bo5i^hl
+E0D4~=_y7O^
+
+diff --git a/apps/core/management/commands/__pycache__/__init__.cpython-312.pyc b/apps/core/management/commands/__pycache__/__init__.cpython-312.pyc
+deleted file mode 100644
+index ffcaf900202c157c6da9085bbc6de6bce82efb52..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 140
+zcmX@j%ge<81fH3pSs?l`h(HIQS%4zb87dhx8U0o=6fpsLpFwJVY3u1H78DfgC+8QX
+z>gOirC8nq5rskCZ`ME$|O0j-?d}dx|NqoFsLFF$Fo80`A(wtPgB37VYMj$Q*F+MUg
+KGBOr116csc9v^}L
+
+diff --git a/apps/core/management/commands/__pycache__/sync_data.cpython-312.pyc b/apps/core/management/commands/__pycache__/sync_data.cpython-312.pyc
+deleted file mode 100644
+index dc328f6448d93f32025f0f226206bcadc4648493..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 5476
+zcmcgwU2Id=9Y5C}iS0N*fN3K%*&SmgPMJ-{CRJ!uOGAP>5N#7EBS4LbFZrlrXV>;Z
+z5S{YjBu+q0J58b$Le++75(9x07|Wj6il$0?aTKJSYfV$tX%BnL2$d#y+3$bOy>=29
+zg@^4%x%ZxP&-s7+{-4KxDJ}IdTrYGS=(t|S*xzYjT~705@h!ZZV`0|J!b;c{QJNJz
+z?Gan2z1glX8`G2ym$j+z)SQ<UIchGlvE3}}NU^X}vtPEGv&B6&Us3XXZ1u!@qAkI2
+zC=v2^^?1I&^z!hF#vq?o`3-)RPpEv{Nbw0{6we_(&NFi2nvv$y#;96_r4yLOyZHE$
+z$}jRMIptHo?ESS`U2O~+WBeBG?-?H$gDO7X!s=Tfct$l+c%8wwl*(tYZQ9cqYL9e>
+zdek~S7FB;5J6>JQ&#FdREWDxCX%S8D0TUyw*1ply(x!!znDKi&J9iSXK}d0(kE<)G
+zsKzjMY!b@cCTWd+J}Feemdn^UvPmkIfl~Z7smwFRFep{!c`xDTQ+Mw4)cBzsph;ns
+zF<_+mHI-lDzXOjx5CP2;zrq0&o|CFEWc2YHM6tShM_xS0F~)E5KLD5%L=>V68BG&p
+zK&2lleIoEb<55)=M!7*|F-c3Dcm{kYAos8eEQh3GX>7a#qF^qKbdyhGKt>TVgAx|d
+z=M?aS#Dm5F2u)zdqRuCYWz`bR1EvLD)j|oM%CCXM6v;01HwFj+LT{YJHqQ7xKOm66
+ze};cbNT@&+HWL45U~-am3Lp&<Q+OKIjPePB2v6x35XxF%S(S7IoVNtBRT5f(4N({b
+zJ{htGc%D_85+OaI*2OwIL(wn+F@=vQqt8cP)hBQOC)zQL=>Y<PaGQoPcPFFmEipYR
+zy$!3T@Bz*vIKe$Y|F$toItjKAy`RsB0k)IHZjdisf{Kv!rjhb{whNCTGu);RDgG%z
+zA)y~CIECpdCJI-`+803uIF2F)Nm3XKKtXYOCH4|4@SIeuw3F=#9|;Nl5T*1Tb`_B4
+zWgRBOtE+`G<WUul43B&gT@m>!+>xJ`>hTGqAFMM17-2La2v8lTPmpO7up*G~zKMXx
+zVz}720nGDi3m?Qhg@ZtqJbV;(fT+^h-y^KALX{D6BNGYB?$}OAV#H68_gEx>6S5Z=
+z3+?)h5BPP<Yyt`uNnnuVnu2kz5KGExB48jd1WA*pQk3wkQV-&Lth=o}qN)4!q;^bt
+z2{vU!YC}j2!tCUTSBb8G2;qtCqu?%LgK`$X1ZXIVuH`cx*=;lrOBF=AEqpR#WgSq4
+zPa#$Sh6rxRiNOqo-wa`3ZQh~o)4J6rP5(uEi>7`#^egC00RX3vL1SW2h#0l1QR|BN
+zC~Sok1@TBTu^a>n@hU6>BSDTrqFlBD$U%F#^CE>ThLgS>1YeVuNVG>=<3h4sT3002
+zBVOy0@kFe1dFYA_*rRs!B-&6J5YC}i4aG~%S27AOA@ma6z_5={+OeFOC@xm@AOl~7
+z3Y5oy4ayKioEGLFUqyX@xl(xnsslAYQmf5BlBmiUz)nm87sP>Zc$s9O?DFzRgv=@7
+zTRzVZ{g$zWb3RrKR)kzW{ezH|q(u<(iKR{oi9|Un)E^kqtW2nta3I7waQQtUW6^;P
+ztyBPN@LU<y>Vf@rGSPnm(Wz*Ya-cS&8ZyqLr;G!+3^r0TARKXs3Zn2g;E7oeXbvE}
+z@G9LQAM1Y4KdD36=TmYeuZH59nXX%8+am8~XTugZVSJ8h3_THRwuO~ud)Ss@&5p1g
+zcPI5c%|$&<Us0~uB$MpJ4v0|bXI5ARSP`80#)U!`0X9g148MT1l=+btKx7g=w!EK#
+zMN?2bpSDCBlSk5OWBe_a0;Enc{#WCFu?nr(Id+<L(Cmt<!))7@PKTAtCLM*jX`j_H
+zE?IQhe1F&e>~yiRXbB1PwZr}RT-bKnex8Nx7wncK*3*<|-Q#=m5;^}T61h%0A(8t@
+z5<NS=u(zN`5Bn}lh&G*c+067q?>Z7*ORo;H+=?sgIPC~KuM}CWw(=Y{{V&+#aIo?U
+z7oT>VXBTXiq}Eemhj3VU*YQio*+0o=x6;i{+7GdA<+(NS{9iOF`C3i>wo(&c>As{7
+zkRZog<G&Fp1TiXGs39aT5ya-f1aa#3C)d+z>U=U3&4rc8Rro+tB3mK0C;iE-n38?k
+z%GFDfwt39ip?)vEAIZw4ooorVM^D6()z7s%xwaq}Hxn}yNRr7Z+29-`vob2HKUwuu
+z+J&@5QYBw}=Ecc25`s>3bkLEteHlt3%~N7r*3xB+F*Ims<s{y}MW&=fV20X$I^m(#
+zi}Y!g5=wwRzt58^iYLOcWFqJ6*4q<Wt~4kLcV{SpLtH%Pj3;^`TCTY1KwVvZQ&Y}e
+zf3ijEO0>tKxuQs{wN=w|PEFTic+@vGzTTMg$o)~RJC0oMh-;A(IY&rujpvGEVqZMB
+z$|NpUYT=xs<w|J1IgV4tqXMp~54ZXQp{}lY0R6rekiA8x7ENF*4i51^zRN(%kt=G$
+zVIrcPT4h!kzZ{bj#E&39_cHGCj+Km*%)2(sx;A9X>+iW5791}3afMfWXTBmZTM?M6
+zs7deR-Zf);M)u5mD`veFABI2f_^4yPa@%a>w(R!ZpRda9KA1hIWou5%Rkq&qwk@o2
+zy5ClKdF97}j{<Y$FQxZ9WqbXdckUd`HnwDI!gH0{J@1JH4|A6mWLjWsW4-Mw#@r3I
+ze?O>TYc||xPRRGb#Y)$W?H$>h-LU)fvh0CF>Am;7%}-?HpRM#~YYu0R9L*knI~xej
+zRUVu7hGxB?M++rH>d}Msf~*Zv|JA!z60N)QX7<ekMD(qv5Ivav*`e&g=4{~bT;-8@
+z@6lQB(MJnTBJ?o69VlO@b=7&;A789>?Fz8ZJnmgv?VqiyUA=3I{q7bg26qGQhBEuz
+zmupuyc<q1oIx$#Qe?fv#bzOAec8>KZK3nn_4Cj&VfKxWrdmN}$LmnJ3#u*WL2j>{d
+zJrojjNU43}H4z6^E<uNo?~|{}ZqOK&kwQJhEfvk>00KrF@u&$O<hS!oYrEPTVzI>W
+zP$W_pX@~pCjn|371lH2&4`(L&Wkw#X#4jjxSTIwRc@B`nel&!mIMj$%6ffurhw`jI
+ztsn7<p9_{AmLSbi5>|7sVk<g76<DOHS*9j-7__PFm6`}bv|?0bS@hBL^G*sKCPei4
+z^K5k+@SbFoicT3YPOXfpe+ze=s_m(7Sn;$hH~a*j;?yzqvV~P_P1zz|+1HwL0E+<A
+z)2yh+<H3AB$QwndhX&c`lZi}@mjQzoUt)_FvIJm26DTpY%8Kmo{X%1XBZSdkz-_6@
+zl<iNgU9K{T^BS$AzOI*jv3iYOfwz6W;+!iOjD|Y3U=XP<*cqeWz3}c027jImMa(ab
+zHZ9VnZ@>-#s7@>-bD|=VCdxY9w%|Wrj$4W?*qHZqTko#>j`hw4+x@M@&a%a|HfNb&
+zE*AS-x#D0j9BTp3VoJz3xaBs6J3`Ucn4hwyzmPTk$I-*<6kj=atCrX+(zpI?jCCr!
+zg5C<L9=d)kReD7yvB)vv+i+X3D~j?jTczSye1$2i|G~C@;Vw^qbKYG(>n{KB<vI7}
+T-l7LZo0YQkJ6|z8guwp+x+@;|
+
+diff --git a/apps/core/management/commands/ensure_superuser.py b/apps/core/management/commands/ensure_superuser.py
+new file mode 100644
+index 0000000..01ca8f8
+--- /dev/null
++++ b/apps/core/management/commands/ensure_superuser.py
+@@ -0,0 +1,50 @@
++"""
++ensure_superuser.py
++---------------------
++ينشئ حساب مدير (superuser) تلقائياً من متغيرات بيئة Railway عند كل عملية
++نشر (Deploy) — بدلاً من الاعتماد على `python manage.py createsuperuser`
++التفاعلي، الذي لا يعمل أصلاً داخل Railway (لا يوجد طرفية تفاعلية في
++خطوة الـ Start Command، وفتح "Console" من واجهة Railway له بيئة منفصلة
++لا تُفعِّل بالضرورة نفس الحزم المثبَّتة، وهو مصدر خطأ
++`ModuleNotFoundError: No module named 'django'` الذي واجهته سابقاً).
++
++آمن للتشغيل في كل عملية نشر (idempotent):
++- إن لم تكن متغيرات البيئة الثلاثة مضبوطة، لا يفعل شيئاً (صامت).
++- إن كان المستخدم موجوداً مسبقاً، يُحدِّث كلمة المرور فقط (لا يفشل
++  بخطأ "IntegrityError: username already exists").
++"""
++import os
++
++from django.contrib.auth import get_user_model
++from django.core.management.base import BaseCommand
++
++
++class Command(BaseCommand):
++    help = 'ينشئ/يُحدِّث حساب superuser من متغيرات البيئة DJANGO_SUPERUSER_*.'
++
++    def handle(self, *args, **options):
++        username = os.environ.get('DJANGO_SUPERUSER_USERNAME')
++        email = os.environ.get('DJANGO_SUPERUSER_EMAIL', '')
++        password = os.environ.get('DJANGO_SUPERUSER_PASSWORD')
++
++        if not username or not password:
++            self.stdout.write(
++                'DJANGO_SUPERUSER_USERNAME أو DJANGO_SUPERUSER_PASSWORD غير '
++                'مضبوطين — تم تخطي إنشاء حساب المدير.'
++            )
++            return
++
++        User = get_user_model()
++        user, created = User.objects.get_or_create(
++            username=username,
++            defaults={'email': email, 'is_staff': True, 'is_superuser': True},
++        )
++
++        user.email = email or user.email
++        user.is_staff = True
++        user.is_superuser = True
++        user.set_password(password)
++        user.save()
++
++        action = 'تم إنشاء' if created else 'تم تحديث'
++        self.stdout.write(self.style.SUCCESS(f'{action} حساب المدير "{username}" بنجاح.'))
+diff --git a/apps/core/migrations/0001_initial.py b/apps/core/migrations/0001_initial.py
+new file mode 100644
+index 0000000..477ffba
+--- /dev/null
++++ b/apps/core/migrations/0001_initial.py
+@@ -0,0 +1,288 @@
++# Generated by Django 5.0.6 on 2026-07-14 00:06
++
++import django.db.models.deletion
++import uuid
++from django.db import migrations, models
++
++
++class Migration(migrations.Migration):
++
++    initial = True
++
++    dependencies = []
++
++    operations = [
++        migrations.CreateModel(
++            name="Channel",
++            fields=[
++                (
++                    "created_at",
++                    models.DateTimeField(
++                        auto_now_add=True, verbose_name="تاريخ الإنشاء"
++                    ),
++                ),
++                (
++                    "updated_at",
++                    models.DateTimeField(auto_now=True, verbose_name="تاريخ آخر تحديث"),
++                ),
++                (
++                    "id",
++                    models.UUIDField(
++                        default=uuid.uuid4,
++                        editable=False,
++                        primary_key=True,
++                        serialize=False,
++                    ),
++                ),
++                ("name", models.CharField(max_length=100, verbose_name="اسم القناة")),
++                (
++                    "logo",
++                    models.ImageField(
++                        blank=True,
++                        null=True,
++                        upload_to="channels/logos/",
++                        verbose_name="شعار القناة",
++                    ),
++                ),
++                (
++                    "stream_url",
++                    models.URLField(
++                        max_length=500, verbose_name="رابط البث (M3U8/HLS)"
++                    ),
++                ),
++                (
++                    "category",
++                    models.CharField(
++                        choices=[
++                            ("sports", "رياضة"),
++                            ("news", "أخبار"),
++                            ("general", "عام"),
++                        ],
++                        default="sports",
++                        max_length=20,
++                        verbose_name="التصنيف",
++                    ),
++                ),
++                ("is_active", models.BooleanField(default=True, verbose_name="نشِطة؟")),
++                (
++                    "order",
++                    models.PositiveIntegerField(default=0, verbose_name="ترتيب الظهور"),
++                ),
++            ],
++            options={
++                "verbose_name": "قناة",
++                "verbose_name_plural": "القنوات",
++                "ordering": ["order", "name"],
++                "indexes": [
++                    models.Index(
++                        fields=["is_active", "category"],
++                        name="core_channe_is_acti_d5513b_idx",
++                    )
++                ],
++            },
++        ),
++        migrations.CreateModel(
++            name="Match",
++            fields=[
++                (
++                    "created_at",
++                    models.DateTimeField(
++                        auto_now_add=True, verbose_name="تاريخ الإنشاء"
++                    ),
++                ),
++                (
++                    "updated_at",
++                    models.DateTimeField(auto_now=True, verbose_name="تاريخ آخر تحديث"),
++                ),
++                (
++                    "id",
++                    models.UUIDField(
++                        default=uuid.uuid4,
++                        editable=False,
++                        primary_key=True,
++                        serialize=False,
++                    ),
++                ),
++                (
++                    "home_team",
++                    models.CharField(max_length=100, verbose_name="الفريق المضيف"),
++                ),
++                (
++                    "away_team",
++                    models.CharField(max_length=100, verbose_name="الفريق الضيف"),
++                ),
++                (
++                    "home_team_logo_url",
++                    models.URLField(
++                        blank=True,
++                        null=True,
++                        verbose_name="شعار الفريق المضيف (رابط خارجي)",
++                    ),
++                ),
++                (
++                    "away_team_logo_url",
++                    models.URLField(
++                        blank=True,
++                        null=True,
++                        verbose_name="شعار الفريق الضيف (رابط خارجي)",
++                    ),
++                ),
++                (
++                    "competition",
++                    models.CharField(
++                        blank=True, max_length=150, verbose_name="البطولة/الدوري"
++                    ),
++                ),
++                (
++                    "match_datetime",
++                    models.DateTimeField(db_index=True, verbose_name="موعد المباراة"),
++                ),
++                (
++                    "status",
++                    models.CharField(
++                        choices=[
++                            ("upcoming", "لم تبدأ بعد"),
++                            ("live", "مباشر الآن"),
++                            ("finished", "انتهت"),
++                        ],
++                        default="upcoming",
++                        max_length=10,
++                        verbose_name="الحالة",
++                    ),
++                ),
++                (
++                    "home_score",
++                    models.PositiveSmallIntegerField(
++                        default=0, verbose_name="أهداف المضيف"
++                    ),
++                ),
++                (
++                    "away_score",
++                    models.PositiveSmallIntegerField(
++                        default=0, verbose_name="أهداف الضيف"
++                    ),
++                ),
++                (
++                    "elapsed_minutes",
++                    models.PositiveSmallIntegerField(
++                        default=0, verbose_name="الدقيقة الحالية"
++                    ),
++                ),
++                (
++                    "external_id",
++                    models.CharField(
++                        blank=True,
++                        db_index=True,
++                        max_length=64,
++                        null=True,
++                        unique=True,
++                        verbose_name="المعرّف الخارجي",
++                    ),
++                ),
++                (
++                    "channel",
++                    models.ForeignKey(
++                        blank=True,
++                        null=True,
++                        on_delete=django.db.models.deletion.SET_NULL,
++                        related_name="matches",
++                        to="core.channel",
++                        verbose_name="قناة البث",
++                    ),
++                ),
++            ],
++            options={
++                "verbose_name": "مباراة",
++                "verbose_name_plural": "المباريات",
++                "ordering": ["match_datetime"],
++            },
++        ),
++        migrations.CreateModel(
++            name="News",
++            fields=[
++                (
++                    "created_at",
++                    models.DateTimeField(
++                        auto_now_add=True, verbose_name="تاريخ الإنشاء"
++                    ),
++                ),
++                (
++                    "updated_at",
++                    models.DateTimeField(auto_now=True, verbose_name="تاريخ آخر تحديث"),
++                ),
++                (
++                    "id",
++                    models.UUIDField(
++                        default=uuid.uuid4,
++                        editable=False,
++                        primary_key=True,
++                        serialize=False,
++                    ),
++                ),
++                ("title", models.CharField(max_length=250, verbose_name="العنوان")),
++                ("content", models.TextField(verbose_name="المحتوى")),
++                (
++                    "image",
++                    models.ImageField(
++                        blank=True,
++                        null=True,
++                        upload_to="news/images/",
++                        verbose_name="صورة الخبر (رفع يدوي)",
++                    ),
++                ),
++                (
++                    "external_image_url",
++                    models.URLField(
++                        blank=True,
++                        max_length=500,
++                        null=True,
++                        verbose_name="رابط صورة خارجي",
++                    ),
++                ),
++                (
++                    "source_url",
++                    models.URLField(
++                        blank=True,
++                        help_text="مفتاح فريد لمنع تكرار نفس الخبر عند إعادة تشغيل sync_data",
++                        max_length=500,
++                        null=True,
++                        unique=True,
++                        verbose_name="رابط المصدر",
++                    ),
++                ),
++                (
++                    "is_published",
++                    models.BooleanField(
++                        db_index=True, default=True, verbose_name="منشور؟"
++                    ),
++                ),
++                (
++                    "related_match",
++                    models.ForeignKey(
++                        blank=True,
++                        null=True,
++                        on_delete=django.db.models.deletion.SET_NULL,
++                        related_name="news_items",
++                        to="core.match",
++                        verbose_name="مرتبط بمباراة",
++                    ),
++                ),
++            ],
++            options={
++                "verbose_name": "خبر",
++                "verbose_name_plural": "الأخبار",
++                "ordering": ["-created_at"],
++            },
++        ),
++        migrations.AddIndex(
++            model_name="match",
++            index=models.Index(fields=["status"], name="core_match_status_b71399_idx"),
++        ),
++        migrations.AddIndex(
++            model_name="news",
++            index=models.Index(
++                fields=["is_published", "-created_at"],
++                name="core_news_is_publ_ce555a_idx",
++            ),
++        ),
++    ]
+diff --git a/apps/core/migrations/__pycache__/__init__.cpython-312.pyc b/apps/core/migrations/__pycache__/__init__.cpython-312.pyc
+deleted file mode 100644
+index 2422ec5e40229c0fd29a17ac472caf6b0b8bfa5e..0000000000000000000000000000000000000000
+GIT binary patch
+literal 0
+HcmV?d00001
+
+literal 131
+zcmX@j%ge<81fH3pSs?l`h(HIQS%4zb87dhx8U0o=6fpsLpFwJVDe37a78DfgC+8QX
+z>gQ&r7bTWt=I0gb$H!;pWtPOp>lIY~;;_lhPbtkwwJTx;YGDN8Vi4maGb1Bo5i^hl
+E0D#&Y7ytkO
+
+diff --git a/config/settings.py b/config/settings.py
+index 8f998ab..49f00c3 100644
+--- a/config/settings.py
++++ b/config/settings.py
+@@ -39,6 +39,15 @@ for _host in filter(None, (h.strip() for h in _extra_hosts.split(','))):
+ 
+ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+ 
++# خلف بروكسي Railway HTTPS دائماً في الإنتاج. نُفعّل هذه فقط عندما
++# DEBUG=False (محلياً على http عادي، تفعيلها يمنع تسجيل الدخول أصلاً)
++SECURE_SSL_REDIRECT = not DEBUG
++SESSION_COOKIE_SECURE = not DEBUG
++CSRF_COOKIE_SECURE = not DEBUG
++SECURE_HSTS_SECONDS = 60 * 60 * 24 * 7 if not DEBUG else 0
++SECURE_HSTS_INCLUDE_SUBDOMAINS = not DEBUG
++SECURE_HSTS_PRELOAD = not DEBUG
++
+ # =============================================================================
+ # التطبيقات المُفعّلة
+ # =============================================================================
+@@ -168,6 +177,40 @@ REST_FRAMEWORK = {
+     'PAGE_SIZE': 20,
+ }
+ 
++# =============================================================================
++# التسجيل (Logging)
++# =============================================================================
++# بدون هذا، لا تظهر أي تفاصيل عن أخطاء الـ 500 في سجلات Railway إطلاقاً:
++# سلوك Django الافتراضي عند DEBUG=False يُرسل أخطاء django.request إلى
++# mail_admins فقط (يتطلب SMTP مضبوطاً)، وليس إلى stdout/stderr. هذا
++# يُجبر كل الأخطاء (بما فيها استثناءات قاعدة البيانات) على الظهور في
++# "Deploy Logs" مباشرة، بغض النظر عن DEBUG.
++LOGGING = {
++    'version': 1,
++    'disable_existing_loggers': False,
++    'handlers': {
++        'console': {
++            'class': 'logging.StreamHandler',
++        },
++    },
++    'root': {
++        'handlers': ['console'],
++        'level': 'INFO',
++    },
++    'loggers': {
++        'django.request': {
++            'handlers': ['console'],
++            'level': 'ERROR',
++            'propagate': False,
++        },
++        'django.db.backends': {
++            'handlers': ['console'],
++            'level': 'WARNING',
++            'propagate': False,
++        },
++    },
++}
++
+ # =============================================================================
+ # هوية لوحة التحكم (django-admin-interface)
+ # =============================================================================
+@@ -178,6 +221,9 @@ ADMIN_INDEX_TITLE = 'إدارة الموقع'
+ # ألوان الثيم الافتراضي — تُضبط تلقائياً عند أول تشغيل عبر core/apps.py
+ # (يمكن تعديلها لاحقاً بصرياً من /admin/ نفسه عبر قسم "Themes")
+ DILMI_THEME_COLORS = {
++    'title': 'Dilmi TV',
++    'title_visible': True,
++    'logo_visible': False,
+     'css_header_background_color': '#0B1220',
+     'css_header_text_color': '#B6FF3C',
+     'css_header_link_color': '#B6FF3C',
+diff --git a/config/urls.py b/config/urls.py
+index fdb3e0c..2350da3 100644
+--- a/config/urls.py
++++ b/config/urls.py
+@@ -4,6 +4,12 @@ from django.urls import path, include
+ from django.conf import settings
+ from django.conf.urls.static import static
+ 
++# ADMIN_SITE_HEADER/TITLE/INDEX_TITLE في settings.py مجرد قيم عادية —
++# Django لا يقرأها تلقائياً، يجب ربطها يدوياً بـ admin.site هنا
++admin.site.site_header = getattr(settings, 'ADMIN_SITE_HEADER', 'Django Administration')
++admin.site.site_title = getattr(settings, 'ADMIN_SITE_TITLE', 'Django Site Admin')
++admin.site.index_title = getattr(settings, 'ADMIN_INDEX_TITLE', 'Administration')
++
+ urlpatterns = [
+     path('admin/', admin.site.urls),
+     path('api/', include('apps.core.urls')),
+diff --git a/railway.json b/railway.json
+index d5a6900..4807780 100644
+--- a/railway.json
++++ b/railway.json
+@@ -5,7 +5,7 @@
+     "buildCommand": "pip install -r requirements.txt && python manage.py collectstatic --noinput"
+   },
+   "deploy": {
+-    "startCommand": "python manage.py migrate && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT",
++    "startCommand": "python manage.py migrate --noinput && python manage.py ensure_superuser && gunicorn config.wsgi:application --bind 0.0.0.0:$PORT",
+     "restartPolicyType": "ON_FAILURE",
+     "restartPolicyMaxRetries": 3
+   }
+diff --git a/templates/admin/index.html b/templates/admin/index.html
+new file mode 100644
+index 0000000..08f3bdc
+--- /dev/null
++++ b/templates/admin/index.html
+@@ -0,0 +1,181 @@
++{% extends "admin/base_site.html" %}
++{% load i18n static %}
++
++{% block extrastyle %}{{ block.super }}
++<link rel="stylesheet" href="{% static "admin/css/dashboard.css" %}">
++<style>
++  #dilmi-dashboard {
++    --bg: #0B1220;
++    --panel: #141C2E;
++    --panel-border: #24304a;
++    --text: #FFFFFF;
++    --muted: #93a2c0;
++    --accent: #B6FF3C;
++  }
++  #dilmi-dashboard { margin-bottom: 30px; }
++  #dilmi-dashboard .stat-grid {
++    display: grid;
++    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
++    gap: 16px;
++    margin-bottom: 24px;
++  }
++  #dilmi-dashboard .stat-card {
++    background: var(--panel);
++    border: 1px solid var(--panel-border);
++    border-radius: 14px;
++    padding: 18px 20px;
++    color: var(--text);
++  }
++  #dilmi-dashboard .stat-card .label {
++    color: var(--muted);
++    font-size: 13px;
++    margin-bottom: 8px;
++  }
++  #dilmi-dashboard .stat-card .value {
++    font-size: 30px;
++    font-weight: 700;
++    color: var(--accent);
++    line-height: 1;
++  }
++  #dilmi-dashboard .panel {
++    background: var(--panel);
++    border: 1px solid var(--panel-border);
++    border-radius: 14px;
++    padding: 20px;
++    color: var(--text);
++  }
++  #dilmi-dashboard .panel h2 {
++    color: var(--text);
++    font-size: 16px;
++    margin: 0 0 14px;
++  }
++  #dilmi-dashboard table.live-matches {
++    width: 100%;
++    border-collapse: collapse;
++    font-size: 13px;
++  }
++  #dilmi-dashboard table.live-matches th {
++    text-align: {% if LANGUAGE_BIDI %}right{% else %}left{% endif %};
++    color: var(--muted);
++    font-weight: 500;
++    padding: 8px 10px;
++    border-bottom: 1px solid var(--panel-border);
++  }
++  #dilmi-dashboard table.live-matches td {
++    padding: 10px;
++    border-bottom: 1px solid var(--panel-border);
++    color: var(--text);
++  }
++  #dilmi-dashboard .badge-live {
++    background: var(--accent);
++    color: var(--bg);
++    font-weight: 700;
++    font-size: 11px;
++    padding: 3px 10px;
++    border-radius: 999px;
++  }
++  #dilmi-dashboard .empty {
++    color: var(--muted);
++    padding: 10px 0;
++  }
++  #dilmi-dashboard a.edit-link {
++    color: var(--accent);
++    font-weight: 600;
++    text-decoration: none;
++  }
++</style>
++{% endblock %}
++
++{% block content %}
++<div id="dilmi-dashboard">
++  <div class="stat-grid">
++    <div class="stat-card">
++      <div class="label">{% translate 'إجمالي المباريات' %}</div>
++      <div class="value">{{ dashboard.stats.total_matches }}</div>
++    </div>
++    <div class="stat-card">
++      <div class="label">{% translate 'مباشر الآن' %}</div>
++      <div class="value">{{ dashboard.stats.live_now }}</div>
++    </div>
++    <div class="stat-card">
++      <div class="label">{% translate 'القنوات النشِطة' %}</div>
++      <div class="value">{{ dashboard.stats.active_channels }}</div>
++    </div>
++    <div class="stat-card">
++      <div class="label">{% translate 'الأخبار المنشورة' %}</div>
++      <div class="value">{{ dashboard.stats.published_news }}</div>
++    </div>
++  </div>
++
++  <div class="panel">
++    <h2>{% translate 'إدارة المباريات المباشرة' %}</h2>
++    {% if dashboard.live_matches %}
++    <table class="live-matches">
++      <thead>
++        <tr>
++          <th>{% translate 'المباراة' %}</th>
++          <th>{% translate 'البطولة' %}</th>
++          <th>{% translate 'النتيجة' %}</th>
++          <th>{% translate 'الدقيقة' %}</th>
++          <th>{% translate 'القناة' %}</th>
++          <th>{% translate 'الحالة' %}</th>
++          <th></th>
++        </tr>
++      </thead>
++      <tbody>
++        {% for match in dashboard.live_matches %}
++        <tr>
++          <td>{{ match.home_team }} vs {{ match.away_team }}</td>
++          <td>{{ match.competition|default:"—" }}</td>
++          <td>{{ match.home_score }} - {{ match.away_score }}</td>
++          <td>{{ match.elapsed_minutes }}'</td>
++          <td>{{ match.channel.name|default:"—" }}</td>
++          <td><span class="badge-live">{% translate 'مباشر' %}</span></td>
++          <td><a class="edit-link" href="{% url 'admin:core_match_change' match.pk %}">{% translate 'تعديل' %}</a></td>
++        </tr>
++        {% endfor %}
++      </tbody>
++    </table>
++    {% else %}
++    <p class="empty">{% translate 'لا توجد مباريات مباشرة حالياً.' %}</p>
++    {% endif %}
++  </div>
++</div>
++
++<div id="content-main">
++  {% include "admin/app_list.html" with app_list=app_list show_changelinks=True %}
++</div>
++{% endblock %}
++
++{% block sidebar %}
++<div id="content-related">
++    <div class="module" id="recent-actions-module">
++        <h2>{% translate 'Recent actions' %}</h2>
++        <h3>{% translate 'My actions' %}</h3>
++            {% load log %}
++            {% get_admin_log 10 as admin_log for_user user %}
++            {% if not admin_log %}
++            <p>{% translate 'None available' %}</p>
++            {% else %}
++            <ul class="actionlist">
++            {% for entry in admin_log %}
++            <li class="{% if entry.is_addition %}addlink{% endif %}{% if entry.is_change %}changelink{% endif %}{% if entry.is_deletion %}deletelink{% endif %}">
++                <span class="visually-hidden">{% if entry.is_addition %}{% translate 'Added:' %}{% elif entry.is_change %}{% translate 'Changed:' %}{% elif entry.is_deletion %}{% translate 'Deleted:' %}{% endif %}</span>
++                {% if entry.is_deletion or not entry.get_admin_url %}
++                    {{ entry.object_repr }}
++                {% else %}
++                    <a href="{{ entry.get_admin_url }}">{{ entry.object_repr }}</a>
++                {% endif %}
++                <br>
++                {% if entry.content_type %}
++                    <span class="mini quiet">{% filter capfirst %}{{ entry.content_type.name }}{% endfilter %}</span>
++                {% else %}
++                    <span class="mini quiet">{% translate 'Unknown content' %}</span>
++                {% endif %}
++            </li>
++            {% endfor %}
++            </ul>
++            {% endif %}
++    </div>
++</div>
++{% endblock %}
+-- 
+2.43.0
+
