@@ -52,10 +52,10 @@ SECURE_HSTS_PRELOAD = not DEBUG
 # التطبيقات المُفعّلة
 # =============================================================================
 INSTALLED_APPS = [
-    # admin_interface و colorfield يجب أن يكونا قبل django.contrib.admin
-    # مباشرة (شرط موثَّق رسمياً من المكتبة نفسها)
-    'admin_interface',
-    'colorfield',
+    # unfold يجب أن يكون قبل django.contrib.admin مباشرة (شرط موثَّق
+    # رسمياً من المكتبة نفسها) — يستبدل django-admin-interface بالكامل
+    'unfold',
+    'unfold.contrib.filters',
 
     'django.contrib.admin',
     'django.contrib.auth',
@@ -184,6 +184,15 @@ STORAGES = {
     },
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
 }
+
+# django-cloudinary-storage يُسجّل أمر collectstatic خاصاً به بمجرد وجوده
+# في INSTALLED_APPS (بغضّ النظر عن كون Cloudinary مُفعَّلاً فعلياً أم لا)،
+# وهذا الأمر يقرأ STATICFILES_STORAGE القديم مباشرة كسمة خام — وهو إعداد
+# لم يعد Django يُنشئه تلقائياً في Django 4.2+ عند استخدام STORAGES فقط،
+# فيفشل collectstatic بالكامل بخطأ AttributeError. نُبقي هذا الإعداد
+# القديم موجوداً فقط لإرضاء ذلك الفحص (STORAGES أعلاه هو المصدر الفعلي).
+STATICFILES_STORAGE = STORAGES['staticfiles']['BACKEND']
+
 WHITENOISE_USE_FINDERS = True
 WHITENOISE_MANIFEST_STRICT = False
 
@@ -253,32 +262,57 @@ NEWS_RSS_FEEDS = [
 ]
 
 # =============================================================================
-# هوية لوحة التحكم (django-admin-interface)
-# =============================================================================
-ADMIN_SITE_HEADER = 'Dilmi TV'
-ADMIN_SITE_TITLE = 'Dilmi TV'
-ADMIN_INDEX_TITLE = 'إدارة الموقع'
-
-# =============================================================================
 # لوحة التحكم المخصصة (apps.dashboard) — منفصلة عن /admin/
 # =============================================================================
 LOGIN_URL = 'dashboard:login'
 LOGIN_REDIRECT_URL = 'dashboard:index'
 
-# ألوان الثيم الافتراضي — تُضبط تلقائياً عند أول تشغيل عبر core/apps.py
-# (يمكن تعديلها لاحقاً بصرياً من /admin/ نفسه عبر قسم "Themes")
-DILMI_THEME_COLORS = {
-    'title': 'Dilmi TV',
-    'title_visible': True,
-    'logo_visible': False,
-    'css_header_background_color': '#0B1220',
-    'css_header_text_color': '#B6FF3C',
-    'css_header_link_color': '#B6FF3C',
-    'css_module_background_color': '#141C2E',
-    'css_module_text_color': '#FFFFFF',
-    'css_module_link_color': '#B6FF3C',
-    'css_generic_link_color': '#B6FF3C',
-    'css_save_button_background_color': '#B6FF3C',
-    'css_save_button_background_hover_color': '#8FD62E',
-    'css_save_button_text_color': '#0B1220',
+def _unfold_site_logo(request):
+    """
+    شعار /admin/ — يُقرأ من نفس صف SiteSettings الذي يستخدمه /dashboard/
+    (راجع apps/dashboard/services.py) حتى لا يُرفع الشعار مرتين. استيراد
+    النموذج هنا (داخل الدالة) عمداً وليس أعلى الملف: settings.py يُنفَّذ
+    قبل تحميل تطبيقات Django، فاستيراد نموذج على مستوى الملف مباشرة يفشل.
+    """
+    from apps.core.models import SiteSettings
+
+    settings_obj = SiteSettings.objects.filter(pk=1).first()
+    if settings_obj and settings_obj.logo:
+        return settings_obj.logo.url
+    return None
+
+
+# =============================================================================
+# هوية لوحة التحكم (django-unfold) — يستبدل django-admin-interface بالكامل
+# =============================================================================
+# لوحة الألوان (COLORS) مبنية آلياً بنفس Hue/Saturation للون العلامة
+# التجارية #B6FF3C عبر كل درجات Tailwind (50..950)، حتى تبقى هوية /admin/
+# مطابقة تماماً لبقية المشروع (لوحة التحكم المخصصة على /dashboard/) بدل
+# الاعتماد على ثيم Unfold الافتراضي المحايد.
+UNFOLD = {
+    'SITE_TITLE': 'Dilmi TV',
+    'SITE_HEADER': 'Dilmi TV',
+    'SITE_LOGO': _unfold_site_logo,
+    'SITE_SYMBOL': 'sports_soccer',
+    'SHOW_HISTORY': True,
+    'SHOW_VIEW_ON_SITE': False,
+    'COLORS': {
+        'primary': {
+            '50': '249 255 240',
+            '100': '242 255 219',
+            '200': '228 255 184',
+            '300': '213 255 143',
+            '400': '194 255 92',
+            '500': '182 255 60',
+            '600': '149 238 0',
+            '700': '108 172 0',
+            '800': '69 111 0',
+            '900': '38 60 0',
+            '950': '19 31 0',
+        },
+    },
+    'SIDEBAR': {
+        'show_search': True,
+        'show_all_applications': True,
+    },
 }

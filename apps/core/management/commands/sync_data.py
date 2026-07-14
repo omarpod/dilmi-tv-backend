@@ -56,6 +56,7 @@ from django.core.management.base import BaseCommand
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime as django_parse_datetime
 
+from apps.core.integrations.ar_translations import translate_competition, translate_team
 from apps.core.integrations.push_notifications import send_topic_notification
 from apps.core.integrations.rapidapi_football import fetch_live_matches, fetch_matches_by_date
 from apps.core.integrations.rss_news import extract_image_url, extract_plain_text, fetch_entries
@@ -117,6 +118,38 @@ def _dig(data, *paths):
     return None
 
 
+def _extract_common_fields(raw):
+    """
+    استخراج الحقول المشتركة بين مصدري المباريات (المباشر وجدول اليوم) —
+    بما فيها ترجمة أسماء الفرق/البطولة عربياً (أفضل جهد متاح، راجع
+    ar_translations.py) وروابط شعارات الفرق. يرجع None إن كانت الحقول
+    الأساسية ناقصة (سجل غير قابل للاستخدام).
+    """
+    external_id = _dig(raw, 'id', 'fixture.id', 'matchId', 'match_id')
+    home_team = _dig(raw, 'teams.home.name', 'homeTeam.name', 'homeTeam', 'home_team', 'home.name')
+    away_team = _dig(raw, 'teams.away.name', 'awayTeam.name', 'awayTeam', 'away_team', 'away.name')
+
+    if not external_id or not home_team or not away_team:
+        return None
+
+    competition_raw = _dig(raw, 'league.name', 'competition.name', 'competition', 'tournament.name')
+
+    return {
+        'external_id': str(external_id),
+        'home_team': translate_team(home_team),
+        'away_team': translate_team(away_team),
+        'home_team_logo_url': _dig(
+            raw, 'teams.home.logo', 'homeTeam.logo', 'home.logo', 'homeTeamLogo', 'homeLogo',
+        ),
+        'away_team_logo_url': _dig(
+            raw, 'teams.away.logo', 'awayTeam.logo', 'away.logo', 'awayTeamLogo', 'awayLogo',
+        ),
+        # لا نُرجع سلسلة فارغة أبداً — إما اسم بطولة حقيقي (مترجم إن أمكن) أو None
+        # صراحة، حتى لا يُخزَّن '' في match.competition (راجع _sync_live_matches)
+        'competition': translate_competition(competition_raw) if competition_raw else None,
+    }
+
+
 class Command(BaseCommand):
     help = 'يسحب المباريات والأخبار من مصادر خارجية. مُصمَّم للتشغيل عبر Railway Cron Job.'
 
@@ -166,22 +199,19 @@ class Command(BaseCommand):
         synced = 0
 
         for raw in raw_matches:
-            external_id = _dig(raw, 'id', 'fixture.id', 'matchId', 'match_id')
-            home_team = _dig(raw, 'teams.home.name', 'homeTeam.name', 'homeTeam', 'home_team', 'home.name')
-            away_team = _dig(raw, 'teams.away.name', 'awayTeam.name', 'awayTeam', 'away_team', 'away.name')
-
-            if not external_id or not home_team or not away_team:
+            fields = _extract_common_fields(raw)
+            if fields is None:
                 logger.warning('سجل مباراة ناقص الحقول الأساسية، تم تجاهله: %s', raw)
                 continue
 
-            external_id = str(external_id)
+            external_id = fields['external_id']
             seen_external_ids.add(external_id)
 
             match, created = Match.objects.get_or_create(
                 external_id=external_id,
                 defaults={
-                    'home_team': home_team,
-                    'away_team': away_team,
+                    'home_team': fields['home_team'],
+                    'away_team': fields['away_team'],
                     # لا يوفّر هذا الـ Endpoint موعد الانطلاق الفعلي (فقط
                     # مباريات مباشرة الآن) — وقت أول رصد هو أقرب تقدير متاح،
                     # ولا نُعيد ضبطه في التحديثات اللاحقة (أسفل) حتى لا يتحرك
@@ -191,12 +221,14 @@ class Command(BaseCommand):
 
             was_live_already = match.status == Match.Status.LIVE
 
-            match.home_team = home_team
-            match.away_team = away_team
+            match.home_team = fields['home_team']
+            match.away_team = fields['away_team']
+            match.home_team_logo_url = fields['home_team_logo_url'] or match.home_team_logo_url
+            match.away_team_logo_url = fields['away_team_logo_url'] or match.away_team_logo_url
             match.home_score = _dig(raw, 'goals.home', 'score.home', 'homeScore', 'home_score') or 0
             match.away_score = _dig(raw, 'goals.away', 'score.away', 'awayScore', 'away_score') or 0
             match.elapsed_minutes = _dig(raw, 'fixture.status.elapsed', 'status.elapsed', 'minute', 'time.minute') or 0
-            match.competition = _dig(raw, 'league.name', 'competition.name', 'competition', 'tournament.name') or match.competition
+            match.competition = fields['competition'] or match.competition
             match.status = Match.Status.LIVE
             match.save()
             synced += 1
@@ -207,7 +239,7 @@ class Command(BaseCommand):
                 send_topic_notification(
                     topic='match_live',
                     title='مباشر الآن',
-                    body=f'{home_team} vs {away_team}',
+                    body=f'{fields["home_team"]} vs {fields["away_team"]}',
                     data={'match_id': external_id},
                 )
 
@@ -231,15 +263,12 @@ class Command(BaseCommand):
 
         synced = 0
         for raw in raw_matches:
-            external_id = _dig(raw, 'id', 'fixture.id', 'matchId', 'match_id')
-            home_team = _dig(raw, 'teams.home.name', 'homeTeam.name', 'homeTeam', 'home_team', 'home.name')
-            away_team = _dig(raw, 'teams.away.name', 'awayTeam.name', 'awayTeam', 'away_team', 'away.name')
-
-            if not external_id or not home_team or not away_team:
+            fields = _extract_common_fields(raw)
+            if fields is None:
                 logger.warning('سجل مباراة (جدول اليوم) ناقص الحقول الأساسية، تم تجاهله: %s', raw)
                 continue
 
-            external_id = str(external_id)
+            external_id = fields['external_id']
             if external_id in skip_external_ids:
                 # صُنِّفت بالفعل كـ "مباشرة" من football-current-live في نفس
                 # هذا التشغيل — ذاك المصدر أدقّ للحظة الحالية، لا نُعيد تصنيفها هنا
@@ -254,15 +283,17 @@ class Command(BaseCommand):
             match, created = Match.objects.get_or_create(
                 external_id=external_id,
                 defaults={
-                    'home_team': home_team,
-                    'away_team': away_team,
+                    'home_team': fields['home_team'],
+                    'away_team': fields['away_team'],
                     'match_datetime': kickoff or timezone.now(),
                 },
             )
 
-            match.home_team = home_team
-            match.away_team = away_team
-            match.competition = _dig(raw, 'league.name', 'competition.name', 'competition', 'tournament.name') or match.competition
+            match.home_team = fields['home_team']
+            match.away_team = fields['away_team']
+            match.home_team_logo_url = fields['home_team_logo_url'] or match.home_team_logo_url
+            match.away_team_logo_url = fields['away_team_logo_url'] or match.away_team_logo_url
+            match.competition = fields['competition'] or match.competition
             match.status = status
             if kickoff:
                 match.match_datetime = kickoff

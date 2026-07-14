@@ -79,14 +79,13 @@ def get_dashboard_context():
 def _get_site_logo_url():
     """
     مصدر الشعار الموحّد بين /admin/ و/dashboard/: نفس الشعار الذي يُرفع من
-    /admin/admin_interface/theme/ (حقل Logo) — بدون تكرار آلية رفع صور
-    منفصلة لكل واجهة.
+    /admin/core/sitesettings/ — بدون تكرار آلية رفع صور منفصلة لكل واجهة.
     """
-    from admin_interface.models import Theme
+    from apps.core.models import SiteSettings
 
-    theme = Theme.objects.filter(active=True).first()
-    if theme and theme.logo:
-        return theme.logo.url
+    settings_obj = SiteSettings.objects.filter(pk=1).first()
+    if settings_obj and settings_obj.logo:
+        return settings_obj.logo.url
     return None
 
 

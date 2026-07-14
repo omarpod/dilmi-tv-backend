@@ -145,3 +145,31 @@ class News(TimeStampedModel):
 
     def __str__(self):
         return self.title
+
+
+class SiteSettings(models.Model):
+    """
+    صف وحيد فقط (Singleton) — مكان مركزي لشعار الموقع، يُقرأ من كل من
+    /admin/ (عبر UNFOLD['SITE_LOGO'] في settings.py) و/dashboard/، حتى لا
+    يُرفع الشعار مرتين في مكانين منفصلين.
+    """
+    logo = models.ImageField('شعار الموقع', upload_to='site/', blank=True, null=True)
+
+    class Meta:
+        verbose_name = 'إعدادات الموقع'
+        verbose_name_plural = 'إعدادات الموقع'
+
+    def __str__(self):
+        return 'إعدادات الموقع'
+
+    def save(self, *args, **kwargs):
+        self.pk = 1
+        super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        pass  # لا يُحذف الصف الوحيد أبداً — فقط يُعدَّل
+
+    @classmethod
+    def get_solo(cls):
+        obj, _ = cls.objects.get_or_create(pk=1)
+        return obj

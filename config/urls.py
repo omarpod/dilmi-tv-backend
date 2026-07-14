@@ -4,12 +4,8 @@ from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
 
-# ADMIN_SITE_HEADER/TITLE/INDEX_TITLE في settings.py مجرد قيم عادية —
-# Django لا يقرأها تلقائياً، يجب ربطها يدوياً بـ admin.site هنا
-admin.site.site_header = getattr(settings, 'ADMIN_SITE_HEADER', 'Django Administration')
-admin.site.site_title = getattr(settings, 'ADMIN_SITE_TITLE', 'Django Site Admin')
-admin.site.index_title = getattr(settings, 'ADMIN_INDEX_TITLE', 'Administration')
-
+# هوية /admin/ (العنوان، الألوان، الأيقونة) تُضبط بالكامل عبر UNFOLD في
+# settings.py — django-unfold يقرأها مباشرة، لا حاجة لربط admin.site هنا
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', include('apps.core.urls')),
