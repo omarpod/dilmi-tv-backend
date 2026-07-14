@@ -50,7 +50,7 @@ RapidAPI). `_classify_status` أدناه تتعامل مع أشيع التسمي
 """
 import logging
 import os
-from datetime import datetime, timezone as dt_timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
@@ -173,7 +173,36 @@ class Command(BaseCommand):
             logger.error('فشلت مزامنة الأخبار: %s', e, exc_info=True)
             self.stdout.write(self.style.ERROR(f'فشلت مزامنة الأخبار: {e}'))
 
+        try:
+            self._prune_old_content()
+        except Exception as e:
+            logger.error('فشل تنظيف البيانات القديمة: %s', e, exc_info=True)
+            self.stdout.write(self.style.ERROR(f'فشل تنظيف البيانات القديمة: {e}'))
+
         self.stdout.write('انتهت المزامنة — العملية ستُغلق الآن (متطلَّب من Railway Cron).')
+
+    def _prune_old_content(self):
+        """
+        حذف نهائي للبيانات التي لم تعد لها فائدة — وليس مسحاً كاملاً قبل
+        كل مزامنة (ذاك كان سيُلغي فائدة upsert بالكامل: يُفقد التاريخ بين
+        الحذف وإعادة الجلب، ويكسر عدّاد "المشاهدين المباشرين" المرتبط
+        بمعرّف المباراة). بدلاً من ذلك: تنظيف دوري لِما فعلاً أصبح غير
+        مفيد — مباريات انتهت منذ فترة، وأخبار قديمة — حتى لا تتراكم لوحة
+        التحكم بأرقام تكبر إلى الأبد دون أن تعكس شيئاً "حالياً".
+        """
+        old_matches, _ = Match.objects.filter(
+            status=Match.Status.FINISHED,
+            match_datetime__lt=timezone.now() - timedelta(days=2),
+        ).delete()
+
+        old_news, _ = News.objects.filter(
+            created_at__lt=timezone.now() - timedelta(days=30),
+        ).delete()
+
+        if old_matches or old_news:
+            self.stdout.write(
+                f'تم حذف {old_matches} مباراة قديمة منتهية و{old_news} خبر قديم (تنظيف دوري).'
+            )
 
     def _sync_matches(self):
         api_key = os.environ.get('RAPIDAPI_KEY')

@@ -1,6 +1,6 @@
 """apps/core/views.py"""
 from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
+from django.views.decorators.cache import cache_page, never_cache
 from rest_framework import viewsets
 
 from .models import Channel, Match, News
@@ -19,11 +19,13 @@ class ChannelViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ChannelSerializer
 
 
+@method_decorator(never_cache, name='list')
 class MatchViewSet(viewsets.ReadOnlyModelViewSet):
     """
     /api/matches/ — بدون تخزين مؤقت عمداً: بيانات المباريات المباشرة
-    (النتيجة، الدقيقة) يجب أن تكون حيّة دائماً، والتخزين المؤقت هنا كان
-    سيعرض نتيجة قديمة للمستخدم لمدة التخزين بالكامل.
+    (النتيجة، الدقيقة) يجب أن تكون حيّة دائماً. never_cache صريحة هنا
+    (بدل الاعتماد على غياب cache_page ضمنياً) لضمان أن أي طبقة وسيطة
+    (Cloudflare، بروكسي، متصفح) لا تُبقي نسخة قديمة أيضاً — وليس Django فقط.
     """
     queryset = Match.objects.all()
     serializer_class = MatchSerializer
