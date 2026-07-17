@@ -13,6 +13,7 @@ from apps.core.forms import (
     AdsSettingsForm, ChannelForm, MatchEditForm, NewsForm, QuickMatchForm,
     StaffUserCreateForm, StaffUserEditForm,
 )
+from apps.core.integrations.push_notifications import send_topic_notification
 from apps.core.models import Channel, Match, News, SiteSettings
 
 from .services import get_dashboard_context
@@ -56,6 +57,12 @@ def quick_add_match(request):
         form = QuickMatchForm(request.POST)
         if form.is_valid():
             match = form.save()
+            if match.status == Match.Status.LIVE:
+                send_topic_notification(
+                    topic='match_live', title='مباشر الآن',
+                    body=f'{match.home_team} vs {match.away_team}',
+                    data={'match_id': str(match.pk)},
+                )
             messages.success(request, f'أُضيفت: {match.home_team} vs {match.away_team}')
             return redirect('dashboard:quick-add-match')
     else:
@@ -142,8 +149,18 @@ def broadcast_toggle(request, pk):
     else:
         match.status = Match.Status.LIVE
         match.elapsed_minutes = 0
-    match.save(update_fields=['status', 'elapsed_minutes', 'updated_at'])
+        match.save(update_fields=['status', 'elapsed_minutes', 'updated_at'])
+        # هذا التبديل اليدوي ("بدء البث") لا يمر عبر advance_match_lifecycle
+        # (المهمة الدورية التي تُرسِل الإشعار تلقائياً) — بدون هذا السطر
+        # لا يصل أي إشعار عند بدء مباراة يدوياً من الداشبورد
+        send_topic_notification(
+            topic='match_live', title='مباشر الآن',
+            body=f'{match.home_team} vs {match.away_team}',
+            data={'match_id': str(match.pk)},
+        )
+        return redirect('dashboard:index')
 
+    match.save(update_fields=['status', 'elapsed_minutes', 'updated_at'])
     return redirect('dashboard:index')
 
 
@@ -177,9 +194,19 @@ def matches_list(request):
 def match_edit(request, pk):
     match = get_object_or_404(Match, pk=pk)
     if request.method == 'POST':
+        was_live = match.status == Match.Status.LIVE
         form = MatchEditForm(request.POST, instance=match)
         if form.is_valid():
             form.save()
+            if not was_live and match.status == Match.Status.LIVE:
+                # نفس منطق broadcast_toggle: تعديل الحالة يدوياً هنا إلى
+                # "مباشر" لا يمر عبر المهمة الدورية advance_match_lifecycle،
+                # فلا إشعار بدونه
+                send_topic_notification(
+                    topic='match_live', title='مباشر الآن',
+                    body=f'{match.home_team} vs {match.away_team}',
+                    data={'match_id': str(match.pk)},
+                )
             messages.success(request, f'تم تحديث: {match.home_team} vs {match.away_team}')
             return redirect('dashboard:matches-list')
     else:

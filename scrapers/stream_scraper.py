@@ -1,33 +1,45 @@
-import asyncio
-from playwright.async_api import async_playwright
+import requests
 import csv
 
-async def scrape_streams():
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        # هنا ستضع رابط صفحة تفاصيل المباراة (يمكن تعديله ليدخل عدة روابط)
-        await page.goto('https://www.yalla-kora.com/matches/', wait_until='networkidle')
-        
-        # استخراج روابط البث (المتوقع وجودها داخل إطار iframe أو صفحة فرعية)
-        streams = await page.eval_on_selector_all('.match-item', '''elements => {
-            return elements.map(el => {
-                return {
-                    team_names: el.querySelector('.team-a')?.innerText.trim() + " vs " + el.querySelector('.team-b')?.innerText.trim(),
-                    stream_url: el.querySelector('iframe')?.src || "No Stream"
-                };
-            });
-        }''')
-        
-        await browser.close()
-        return streams
+def fetch_matches_api():
+    url = "https://www.scorebat.com/video-api/v3/"
+    try:
+        response = requests.get(url, timeout=15)
+        if response.status_code == 200:
+            data = response.json()
+            matches = data.get('response', [])
+            
+            results = []
+            for match in matches:
+                home = match.get('homeTeam', {}).get('name', 'Unknown')
+                away = match.get('awayTeam', {}).get('name', 'Unknown')
+                
+                # استخراج رابط البث (الـ embed الأول المتاح)
+                videos = match.get('videos', [])
+                embed_link = ""
+                if videos:
+                    # نقوم باستخراج رابط src الموجود داخل كود الـ iframe
+                    # هذا الجزء يبحث عن الرابط داخل نص الـ HTML الخاص بالـ embed
+                    raw_embed = videos[0].get('embed', '')
+                    if "src='" in raw_embed:
+                        embed_link = raw_embed.split("src='")[1].split("'")[0]
 
-# حفظ الروابط في ملف منفصل
-data = asyncio.run(scrape_streams())
-with open('stream_links.csv', 'w', newline='', encoding='utf-8') as f:
-    writer = csv.writer(f)
-    writer.writerow(['match_name', 'stream_url'])
-    for s in data:
-        writer.writerow([s['team_names'], s['stream_url']])
+                results.append({
+                    'home_team': home,
+                    'away_team': away,
+                    'match_datetime': match.get('date', '').replace('T', ' ').replace('Z', ''),
+                    'competition': match.get('competition', 'General'),
+                    'stream_link': embed_link  # هذا هو رابط البث الجديد
+                })
+            
+            fieldnames = ['home_team', 'away_team', 'match_datetime', 'competition', 'stream_link']
+            with open('live_matches.csv', 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.DictWriter(f, fieldnames=fieldnames)
+                writer.writeheader()
+                writer.writerows(results)
+            print(f"تم استخراج {len(results)} مباراة مع روابط البث!")
+    except Exception as e:
+        print(f"حدث خطأ: {e}")
 
-print("تم استخراج روابط البث بنجاح في ملف stream_links.csv!")
+if __name__ == "__main__":
+    fetch_matches_api()
