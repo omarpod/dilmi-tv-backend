@@ -3,10 +3,12 @@ from django.contrib import admin
 from django.contrib.auth.admin import GroupAdmin as DjangoGroupAdmin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 from django.contrib.auth.models import Group, User
-from unfold.admin import ModelAdmin
+from unfold.admin import ModelAdmin, TabularInline
 from unfold.forms import AdminPasswordChangeForm, UserChangeForm, UserCreationForm
 
-from .models import Channel, Match, News, SiteSettings
+from apps.streaming.models import StreamSource
+
+from .models import Channel, IntegrationHealth, Match, News, SiteSettings
 
 # بدون هذا، صفحات المستخدمين/المجموعات (django.contrib.auth) تبقى بالشكل
 # القديم غير المُنسَّق بينما بقية /admin/ أصبحت Unfold — نفس "الفوضى"
@@ -27,12 +29,31 @@ class GroupAdmin(DjangoGroupAdmin, ModelAdmin):
     pass
 
 
+class StreamSourceInline(TabularInline):
+    """
+    روابط البث الخاصة بالقناة (Primary + Fallbacks) — تُدار كلها من نفس
+    صفحة القناة بدل قسم إدارة منفصل. حقول الصحة (is_healthy/last_checked_at
+    وغيرها) للقراءة فقط لأن Celery Beat هو من يُحدّثها دورياً، وليس الإدخال
+    اليدوي.
+    """
+    model = StreamSource
+    extra = 1
+    fields = ('url', 'label', 'priority', 'is_active', 'is_healthy', 'consecutive_failures', 'last_checked_at')
+    readonly_fields = ('is_healthy', 'consecutive_failures', 'last_checked_at')
+    ordering = ('priority',)
+
+
 @admin.register(Channel)
 class ChannelAdmin(ModelAdmin):
-    list_display = ('name', 'category', 'is_active', 'order')
+    list_display = ('name', 'category', 'is_active', 'order', 'sources_count')
     list_filter = ('category', 'is_active')
     list_editable = ('is_active', 'order')
     search_fields = ('name',)
+    inlines = [StreamSourceInline]
+
+    def sources_count(self, obj):
+        return obj.sources.filter(is_active=True).count()
+    sources_count.short_description = 'روابط بث نشِطة'
 
 
 @admin.register(Match)
@@ -48,9 +69,31 @@ class MatchAdmin(ModelAdmin):
 
 @admin.register(News)
 class NewsAdmin(ModelAdmin):
-    list_display = ('title', 'is_published', 'created_at', 'source_url')
-    list_filter = ('is_published',)
+    """مطابقة عمداً لـ MatchAdmin: نفس نمط list_filter/date_hierarchy
+    لحالة (Status) مُدارة بنفس الفلسفة (Scheduled/Published/Archived)."""
+    list_display = ('title', 'status', 'publish_at', 'archive_at', 'created_at', 'source_url')
+    list_filter = ('status',)
+    list_editable = ('status',)
     search_fields = ('title', 'content')
+    date_hierarchy = 'created_at'
+
+
+@admin.register(IntegrationHealth)
+class IntegrationHealthAdmin(ModelAdmin):
+    """للعرض فقط — sync_data.py هو من يُحدّث هذه الصفوف تلقائياً مع كل
+    محاولة مزامنة، لا فائدة من إضافة/حذف يدوي."""
+    list_display = ('label', 'is_healthy', 'last_checked_at', 'last_success_at')
+    list_filter = ('is_healthy',)
+    readonly_fields = ('key', 'label', 'is_healthy', 'last_checked_at', 'last_success_at', 'last_error')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(SiteSettings)

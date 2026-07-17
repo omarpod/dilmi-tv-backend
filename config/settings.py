@@ -76,6 +76,7 @@ INSTALLED_APPS = [
     'apps.core',
     'apps.analytics',
     'apps.dashboard',
+    'apps.streaming',
 ]
 
 X_FRAME_OPTIONS = 'SAMEORIGIN'
@@ -128,11 +129,17 @@ if not _database_url and not _allow_local_sqlite:
         'يدوياً، أو فعّل USE_LOCAL_SQLITE=True عمداً للتطوير بدون اتصال.'
     )
 
+# SSL: مطلوب دائماً على Railway (قاعدة بيانات مُدارة)، لكن غير مدعوم على
+# حاوية PostgreSQL محلية عادية (docker-compose) — DATABASE_SSL_REQUIRE
+# يسمح بتعطيله صراحة محلياً دون التأثير على سلوك Railway الافتراضي الآمن.
+_ssl_require_override = os.environ.get('DATABASE_SSL_REQUIRE')
+_ssl_require = bool(_database_url) if _ssl_require_override is None else _ssl_require_override == 'True'
+
 DATABASES = {
     'default': dj_database_url.config(
         default=_database_url or f'sqlite:///{BASE_DIR / "db.sqlite3"}',
         conn_max_age=600,
-        ssl_require=bool(_database_url),
+        ssl_require=_ssl_require,
     )
 }
 
@@ -145,17 +152,86 @@ USE_I18N = True
 USE_TZ = True
 
 # =============================================================================
-# التخزين المؤقت (Caching) — بسيط عبر Django Cache Framework
+# التخزين المؤقت (Caching) + Redis
 # =============================================================================
-# LocMemCache: داخل عملية Python نفسها — لا يتطلب Redis. القيود (بصراحة):
-# كل Worker له ذاكرته المستقلة، وتُمحى عند إعادة النشر. مقبول تماماً الآن،
-# وقابل للترقية لـ django-redis لاحقاً بتغيير سطر واحد فقط.
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        'LOCATION': 'dilmi-tv-cache',
-        'TIMEOUT': 300,
+# REDIS_URL نفسها تُستخدم لثلاثة أغراض مختلفة: Cache Framework هنا، وناقل
+# مهام Celery (Broker) ومخزن نتائجها أدناه — عملية Redis واحدة تكفي الثلاثة
+# جميعاً، لا حاجة لثلاث عمليات منفصلة.
+REDIS_URL = os.environ.get('REDIS_URL')
+
+if REDIS_URL:
+    # django-redis: ذاكرة مؤقتة *مشتركة* بين كل عمليات gunicorn (على عكس
+    # LocMemCache القديمة التي كانت لكل عملية ذاكرتها المستقلة — يعني عملياً
+    # أن cache_page لم يكن يعمل بفعالية حقيقية مع أكثر من Worker واحد)
+    CACHES = {
+        'default': {
+            'BACKEND': 'django_redis.cache.RedisCache',
+            'LOCATION': REDIS_URL,
+            'OPTIONS': {'CLIENT_CLASS': 'django_redis.client.DefaultClient'},
+            'TIMEOUT': 300,
+        }
     }
+else:
+    # بدون Redis (تطوير محلي بدون Docker مثلاً) — نرجع تلقائياً لذاكرة
+    # العملية الواحدة حتى لا يحتاج التطوير المحلي تشغيل Redis إجبارياً
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+            'LOCATION': 'dilmi-tv-cache',
+            'TIMEOUT': 300,
+        }
+    }
+
+# =============================================================================
+# Celery — طوابير المهام (مزامنة المباريات/الأخبار + فحص روابط البث دورياً)
+# =============================================================================
+# بديل نهائي لحلقة run_sync_loop اليدوية: الآن Celery Beat يُشغّل نفس
+# sync_data على فاصل ثابت عبر عملية worker منفصلة تماماً عن عملية الويب،
+# مع دعم كامل للتوسّع الأفقي (عدة عمّال يستهلكون من نفس الطابور).
+CELERY_BROKER_URL = REDIS_URL or 'redis://localhost:6379/0'
+CELERY_RESULT_BACKEND = REDIS_URL or 'redis://localhost:6379/0'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_TIME_LIMIT = 10 * 60  # قطع أي مهمة عالقة بعد 10 دقائق بدل تعليقها للأبد
+
+CELERY_BEAT_SCHEDULE = {
+    # 'sync-live-matches' مُعطَّلة عمداً — تأكَّدنا فعلياً أن خطة RapidAPI
+    # BASIC توفّر 100 طلب/شهر فقط (وليس يومياً)، وهذا لا يكفي لأي جدولة
+    # منفصلة "مباشرة" مهما كان الفاصل. جدول اليوم أدناه (كل 30 دقيقة)
+    # يبقى مقيّداً بحد أدنى 12 ساعة بين الطلبات الفعلية عبر
+    # RAPIDAPI_MIN_CALL_INTERVAL في sync_data.py — هو المصدر الوحيد
+    # المُفعَّل لبيانات RapidAPI حالياً. أعد تفعيل هذه المهمة عند ترقية
+    # الخطة لحصة تدعم تحديثاً مباشراً حقيقياً:
+    # 'sync-live-matches': {
+    #     'task': 'apps.streaming.tasks.run_sync_live_matches',
+    #     'schedule': 300.0,
+    # },
+    'sync-matches-and-news': {
+        'task': 'apps.streaming.tasks.run_sync_data',
+        'schedule': 1800.0,  # 30 دقيقة — جدول اليوم + الأخبار + التنظيف (ليس المباشر، راجع أعلاه)
+    },
+    'check-stream-sources-health': {
+        'task': 'apps.streaming.tasks.check_stream_sources_health',
+        'schedule': 45.0,  # كل 45 ثانية — فحص خفيف (HEAD) لروابطكم الخاصة فقط
+    },
+    'advance-match-lifecycle': {
+        'task': 'apps.core.tasks.advance_match_lifecycle',
+        'schedule': 60.0,  # كل دقيقة — شبكة أمان زمنية، مستقلة عن sync_data
+    },
+    'advance-news-lifecycle': {
+        'task': 'apps.core.tasks.advance_news_lifecycle',
+        'schedule': 300.0,  # كل 5 دقائق — لا حاجة لدقّة الدقيقة الواحدة هنا
+    },
+    'snapshot-viewers': {
+        'task': 'apps.analytics.tasks.snapshot_viewers',
+        'schedule': 300.0,  # كل 5 دقائق — مصدر خط اتجاه المشاهدين (Sparkline)
+    },
+    'prune-analytics': {
+        'task': 'apps.analytics.tasks.prune_analytics',
+        'schedule': 3600.0,  # كل ساعة
+    },
 }
 
 # =============================================================================

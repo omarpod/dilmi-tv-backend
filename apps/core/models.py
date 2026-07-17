@@ -14,6 +14,7 @@ apps/core/models.py
 import uuid
 
 from django.db import models
+from django.utils import timezone
 
 
 class TimeStampedModel(models.Model):
@@ -40,7 +41,8 @@ class Channel(TimeStampedModel):
 
     name = models.CharField('اسم القناة', max_length=100)
     logo = models.ImageField('شعار القناة', upload_to='channels/logos/', blank=True, null=True)
-    stream_url = models.URLField('رابط البث (M3U8/HLS)', max_length=500)
+    # رابط البث الوحيد القديم (stream_url) انتقل إلى apps.streaming.StreamSource
+    # — كل قناة تدعم الآن عدة روابط مرتّبة بالأولوية (راجع related_name='sources')
     category = models.CharField('التصنيف', max_length=20, choices=Category.choices, default=Category.SPORTS)
 
     is_active = models.BooleanField('نشِطة؟', default=True)
@@ -114,7 +116,15 @@ class Match(TimeStampedModel):
 
 
 class News(TimeStampedModel):
-    """خبر رياضي — يُسحب تلقائياً من RSS عبر sync_data، أو يُكتب يدوياً."""
+    """خبر رياضي — يُسحب تلقائياً من RSS عبر sync_data، أو يُكتب يدوياً.
+    دورة حياة مطابقة لـ Match عمداً (Scheduled -> Published -> Archived
+    بدل Upcoming -> Live -> Finished) — نفس فلسفة إدارة الحالة، بحيث يكون
+    قسما "المباريات" و"الأخبار" في لوحة الإدارة متماثلين تماماً."""
+
+    class Status(models.TextChoices):
+        SCHEDULED = 'scheduled', 'مجدول'
+        PUBLISHED = 'published', 'منشور'
+        ARCHIVED = 'archived', 'مؤرشف'
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
 
@@ -133,14 +143,22 @@ class News(TimeStampedModel):
         related_name='news_items', verbose_name='مرتبط بمباراة',
     )
 
-    is_published = models.BooleanField('منشور؟', default=True, db_index=True)
+    status = models.CharField('الحالة', max_length=10, choices=Status.choices, default=Status.PUBLISHED)
+    publish_at = models.DateTimeField(
+        'وقت النشر المجدول', null=True, blank=True,
+        help_text='اختياري — إن ضُبط وكانت الحالة "مجدول"، يُنشَر الخبر تلقائياً عند هذا الوقت.',
+    )
+    archive_at = models.DateTimeField(
+        'وقت الأرشفة التلقائية', null=True, blank=True,
+        help_text='اختياري — إن ضُبط، يُنقَل الخبر تلقائياً لـ"مؤرشف" عند هذا الوقت.',
+    )
 
     class Meta:
         verbose_name = 'خبر'
         verbose_name_plural = 'الأخبار'
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['is_published', '-created_at']),
+            models.Index(fields=['status', '-created_at']),
         ]
 
     def __str__(self):
@@ -173,3 +191,40 @@ class SiteSettings(models.Model):
     def get_solo(cls):
         obj, _ = cls.objects.get_or_create(pk=1)
         return obj
+
+
+class IntegrationHealth(models.Model):
+    """
+    حالة آخر محاولة اتصال فعلية بمزوّد بيانات خارجي (RapidAPI حالياً) —
+    صف واحد لكل مصدر (`key` فريد)، يُحدَّثه sync_data.py مع كل محاولة
+    مزامنة (ناجحة أو فاشلة)، ويُقرأ من /dashboard/ لعرض تنبيه واضح بدل
+    ترك فشل صامت لا يظهر إلا في سجلات الـ worker.
+    """
+    key = models.CharField('المعرّف', max_length=50, unique=True)
+    label = models.CharField('الاسم المعروض', max_length=100)
+    is_healthy = models.BooleanField('متصل بنجاح؟', default=True)
+    last_checked_at = models.DateTimeField('آخر محاولة', null=True, blank=True)
+    last_success_at = models.DateTimeField('آخر نجاح', null=True, blank=True)
+    last_error = models.TextField('آخر رسالة خطأ', blank=True)
+
+    class Meta:
+        verbose_name = 'حالة تكامل خارجي'
+        verbose_name_plural = 'حالة التكاملات الخارجية'
+
+    def __str__(self):
+        return self.label
+
+    @classmethod
+    def record_success(cls, key, label):
+        now = timezone.now()
+        cls.objects.update_or_create(
+            key=key,
+            defaults={'label': label, 'is_healthy': True, 'last_checked_at': now, 'last_success_at': now, 'last_error': ''},
+        )
+
+    @classmethod
+    def record_failure(cls, key, label, error_message):
+        cls.objects.update_or_create(
+            key=key,
+            defaults={'label': label, 'is_healthy': False, 'last_checked_at': timezone.now(), 'last_error': str(error_message)[:2000]},
+        )

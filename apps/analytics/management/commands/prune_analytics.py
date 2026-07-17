@@ -6,8 +6,9 @@ prune_analytics.py
   المشاهد غادر فعلياً — إبقاؤه كان سيُحصى خطأً ضمن "الأجهزة الفريدة اليوم").
 - ViewerSnapshot: نُبقي فقط آخر 30 يوماً (كافية لأي تحليل اتجاه قريب).
 
-مُصمَّم للتشغيل عبر Railway Cron Job (مرة كل ساعة مثلاً) — بنفس أسلوب
-sync_data.py و snapshot_viewers.py.
+مُجدوَل الآن عبر Celery Beat كل ساعة (راجع apps/analytics/tasks.py
+وCELERY_BEAT_SCHEDULE في config/settings.py) — هذا الأمر نفسه يبقى
+قابلاً للتشغيل يدوياً من الطرفية وقت الحاجة.
 """
 from datetime import timedelta
 
@@ -18,7 +19,7 @@ from apps.analytics.models import ViewerSession, ViewerSnapshot
 
 
 class Command(BaseCommand):
-    help = 'ينظف جلسات المشاهدة المنتهية ولقطات المشاهدين القديمة. للتشغيل عبر Railway Cron Job.'
+    help = 'ينظف جلسات المشاهدة المنتهية ولقطات المشاهدين القديمة. مُجدوَل عبر Celery Beat.'
 
     def handle(self, *args, **options):
         stale_sessions, _ = ViewerSession.objects.filter(

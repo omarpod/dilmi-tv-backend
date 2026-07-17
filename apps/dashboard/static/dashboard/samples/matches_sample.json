@@ -1,0 +1,22 @@
+[
+  {
+    "home_team": "الأهلي",
+    "away_team": "الزمالك",
+    "competition": "الدوري المصري",
+    "match_datetime": "17/07/2026 20:00",
+    "home_team_logo_url": "",
+    "away_team_logo_url": "",
+    "home_score": "",
+    "away_score": ""
+  },
+  {
+    "home_team": "برشلونة",
+    "away_team": "ريال مدريد",
+    "competition": "الدوري الإسباني",
+    "match_datetime": "18/07/2026 22:00",
+    "home_team_logo_url": "",
+    "away_team_logo_url": "",
+    "home_score": "",
+    "away_score": ""
+  }
+]

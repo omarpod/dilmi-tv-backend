@@ -2,15 +2,22 @@
 apps/core/integrations/rapidapi_football.py
 ------------------------------------------------
 عميل واجهة "Free API Live Football Data" على RapidAPI. مسؤوليته الوحيدة:
-جلب القائمة الخام للمباريات المباشرة كما هي — أي تفسير/تحويل لحقول Match
-يتم في sync_data.py عمداً، حتى يبقى هذا الملف بسيطاً وقابلاً لإعادة
-الاستخدام أو الاستبدال بمزوّد آخر لاحقاً دون لمس منطق قاعدة البيانات.
+جلب القائمة الخام للمباريات (المباشرة، أو جدول يوم كامل) كما هي — أي
+تفسير/تحويل لحقول Match يتم في sync_data.py عمداً، حتى يبقى هذا الملف
+بسيطاً وقابلاً لإعادة الاستخدام أو الاستبدال بمزوّد آخر لاحقاً دون لمس
+منطق قاعدة البيانات.
+
+المفتاح (api_key) يُقرأ من متغير البيئة RAPIDAPI_KEY في مكان واحد فقط —
+sync_data.py (عبر os.environ.get('RAPIDAPI_KEY'))، ويُمرَّر صراحة كمعامل
+لكل دالة هنا. هذا الملف نفسه لا يقرأ متغيرات البيئة مباشرة عمداً: يبقى
+قابلاً للاختبار بمفتاح وهمي دون الحاجة لضبط بيئة فعلية، والمصدر الوحيد
+لقيمة المفتاح الحقيقية يبقى مكاناً واحداً بدل تكراره في كل ملف.
 
 ملاحظة أمانة مهمة: لم أتمكن من الوصول لتوثيق شكل الاستجابة الدقيق لهذا
 الـ Endpoint تحديداً (صفحات توثيق RapidAPI تحجب الجلب الآلي دون تسجيل
-دخول). دالة fetch_live_matches لا تفترض عمقاً أو غلافاً ثابتاً — تبحث في
-كامل بنية الاستجابة (بغضّ النظر عن عمق التداخل، بما فيه حالة التجميع حسب
-الدوري) عن القائمة التي تحتوي فعلاً سجلات تشبه مباريات (مفاتيح مثل
+دخول). الدوال أدناه لا تفترض عمقاً أو غلافاً ثابتاً — تبحث في كامل بنية
+الاستجابة (بغضّ النظر عن عمق التداخل، بما فيه حالة التجميع حسب الدوري)
+عن القائمة التي تحتوي فعلاً سجلات تشبه مباريات (مفاتيح مثل
 homeTeam/awayTeam/goals). إن فشل هذا التخمين، الخطأ الناتج يطبع خريطة
 كاملة لبنية الاستجابة (بدون قيم حساسة) تكفي لتصحيح المنطق دفعة واحدة.
 """
@@ -19,6 +26,11 @@ import requests
 RAPIDAPI_HOST = 'free-api-live-football-data.p.rapidapi.com'
 LIVE_MATCHES_URL = f'https://{RAPIDAPI_HOST}/football-current-live'
 MATCHES_BY_DATE_URL = f'https://{RAPIDAPI_HOST}/football-get-matches-by-date'
+
+# مطلوب من بعض واجهات RapidAPI فقط كصورة "طلب عادي" — لا علاقة له بتجاوز
+# أي حظر (بوابة RapidAPI نفسها تتحقق من x-rapidapi-key/host فقط، وليس من
+# User-Agent)، مُبقى لأنه غير مؤذٍ وقد يفيد مع بعض التهيئات الوسيطة
+_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 
 
 class RapidApiFootballError(Exception):
@@ -29,9 +41,20 @@ def _get(url, api_key, params=None, timeout=15):
     response = requests.get(
         url,
         params=params,
-        headers={'x-rapidapi-key': api_key, 'x-rapidapi-host': RAPIDAPI_HOST},
+        headers={
+            'x-rapidapi-key': api_key,
+            'x-rapidapi-host': RAPIDAPI_HOST,
+            'User-Agent': _USER_AGENT,
+        },
         timeout=timeout,
     )
+
+    if response.status_code != 200:
+        # طباعة صريحة لنص الرد الفعلي من RapidAPI قبل رفع الاستثناء —
+        # بوابة RapidAPI تُرجع عادة رسالة JSON واضحة (مفتاح غير مفعّل،
+        # تجاوز الحصة، عدم اشتراك...) وهذا أهم سطر تشخيص لأي 403/429
+        print(f'[rapidapi_football] {response.status_code} من {url}: {response.text[:1000]}')
+
     response.raise_for_status()
     return response.json()
 
@@ -56,12 +79,15 @@ _MATCH_SIGNAL_KEYS = {
 
 
 def fetch_live_matches(api_key, timeout=15):
+    """المباريات المباشرة الآن فقط — endpoint منفصل تماماً عن جدول اليوم
+    عمداً (راجع sync_data.py: --live-only يستدعي هذه فقط، على فاصل قصير)."""
     payload = _get(LIVE_MATCHES_URL, api_key, timeout=timeout)
     return _extract_or_raise(payload, 'football-current-live')
 
 
 def fetch_matches_by_date(api_key, date_str, timeout=15):
-    """date_str بصيغة YYYYMMDD (مثال: 20241107) — كما في المثال الذي زوّدتنا به."""
+    """date_str بصيغة YYYYMMDD (مثال: 20241107) — يُحسَب ديناميكياً في
+    sync_data.py من التاريخ الحالي، وليس ثابتاً هنا."""
     payload = _get(MATCHES_BY_DATE_URL, api_key, params={'date': date_str}, timeout=timeout)
     return _extract_or_raise(payload, 'football-get-matches-by-date')
 

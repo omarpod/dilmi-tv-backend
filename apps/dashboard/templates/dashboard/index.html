@@ -3,6 +3,13 @@
 {% block page_title %}الرئيسية{% endblock %}
 
 {% block content %}
+{% for alert in integration_alerts %}
+<div class="card alert-banner">
+  <strong>⚠ تعذّر الاتصال بمصدر: {{ alert.label }}</strong>
+  <span>آخر محاولة: {{ alert.last_checked_at|date:"Y-m-d H:i" }} — {{ alert.last_error }}</span>
+</div>
+{% endfor %}
+
 <div class="stat-grid">
   <div class="card stat-card">
     <div class="label">المشاهدون المباشرون الآن</div>
@@ -22,6 +29,12 @@
   <div class="card stat-card">
     <div class="label">نسبة التفاعل</div>
     <div class="value">{% if stats.engagement_pct is not None %}{{ stats.engagement_pct }}%{% else %}—{% endif %}</div>
+  </div>
+  <div class="card stat-card">
+    <div class="label">نمو الزوار (24 ساعة)</div>
+    <div class="value{% if stats.visitor_growth_pct > 0 %} accent{% elif stats.visitor_growth_pct < 0 %} danger{% endif %}">
+      {% if stats.visitor_growth_pct is not None %}{% if stats.visitor_growth_pct > 0 %}+{% endif %}{{ stats.visitor_growth_pct }}%{% else %}—{% endif %}
+    </div>
   </div>
 </div>
 

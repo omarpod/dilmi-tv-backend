@@ -2,9 +2,9 @@
 snapshot_viewers.py
 ---------------------
 يُسجّل لقطة دورية لعدد المشاهدين المباشرين — مصدر خط الاتجاه (Sparkline)
-في اللوحة. مُصمَّم للتشغيل عبر Railway Cron Job كل 5 دقائق مثلاً (بنفس
-أسلوب sync_data.py في apps/core — راجع تعليقاته لخطوات إعداد Cron Job
-جديد على Railway).
+في اللوحة. مُجدوَل الآن عبر Celery Beat كل 5 دقائق (راجع
+apps/analytics/tasks.py وCELERY_BEAT_SCHEDULE في config/settings.py) —
+هذا الأمر نفسه يبقى قابلاً للتشغيل يدوياً من الطرفية وقت الحاجة.
 
 "مباشر الآن" يُعرَّف هنا بـ: أي جلسة مشاهدة نبضت خلال آخر 90 ثانية (أي
 نبضتين تقريباً بمعدل استدعاء كل 30 ثانية من العميل) — هامش يتحمّل فقدان
@@ -19,7 +19,7 @@ from apps.analytics.models import ViewerSession, ViewerSnapshot
 
 
 class Command(BaseCommand):
-    help = 'يسجل لقطة لعدد المشاهدين المباشرين حالياً (Sparkline). للتشغيل عبر Railway Cron Job.'
+    help = 'يسجل لقطة لعدد المشاهدين المباشرين حالياً (Sparkline). مُجدوَل عبر Celery Beat.'
 
     def handle(self, *args, **options):
         threshold = timezone.now() - timedelta(seconds=90)

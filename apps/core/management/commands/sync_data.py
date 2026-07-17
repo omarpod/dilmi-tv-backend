@@ -1,45 +1,41 @@
 """
 sync_data.py
 -------------
-أمر سحب البيانات الدوري (مباريات + أخبار) — **مُصمَّم خصيصاً ليعمل عبر
-Railway Cron Job**، وليس Celery أو APScheduler.
+أمر سحب البيانات (مباريات + أخبار) — مُجدوَل عبر Celery Beat (راجع
+CELERY_BEAT_SCHEDULE في config/settings.py وapps/streaming/tasks.py).
 
-== لماذا Railway Cron Job هو "الطريقة المثلى" التي طلبتها (وليس APScheduler) ==
-1. **بلا كود إضافي للجدولة نفسها**: Railway يُشغّل هذا الأمر تلقائياً
-   حسب جدول Cron تضبطه من الواجهة مباشرة — لا حاجة لأي مكتبة جدولة
-   (APScheduler/Celery Beat) داخل كودك إطلاقاً.
-2. **معزول تماماً عن خدمة الويب**: يعمل كخدمة Railway منفصلة (نفس
-   المستودع، Start Command مختلف)، فلا يستهلك موارد Gunicorn أو يخاطر
-   بتعطيل الموقع الرئيسي إن فشل.
-3. **شرط إلزامي من Railway نفسه**: يجب أن **ينتهي وينهي العملية (exit)
-   فور اكتمال المهمة** — Railway لا يُنهي العمليات تلقائياً؛ إن بقيت
-   عملية سابقة "عالقة"، يتجاهل Railway أي تشغيل جديد مجدوَل حتى تنتهي
-   الأولى. لهذا الأمر هنا يُنفّذ المهمة ثم يخرج مباشرة، دون أي حلقة
-   `while True` أو اتصال مفتوح يبقيه حيّاً.
+يدعم وضعين، لكن أحدهما مُعطَّل من الجدولة التلقائية حالياً بسبب حصة
+RapidAPI الشهرية الصغيرة جداً على خطة BASIC (100 طلب/شهر فقط — تأكَّدنا
+من هذا الرقم فعلياً بعد استنفادها بالكامل):
 
-== إعداد Cron Job في Railway (خطوات) ==
-1. من لوحة مشروعك على Railway: New Service → اختر نفس المستودع (Repo)
-2. في إعدادات الخدمة الجديدة (وليس خدمة الويب الأصلية):
-   Settings → Deploy → Custom Start Command:
-       python manage.py sync_data
-3. في نفس الصفحة: Settings → Cron Schedule، أدخل تعبير Cron، مثال:
-       */15 * * * *     (كل 15 دقيقة — مناسب لمباريات مباشرة)
-4. Settings → Variables لهذه الخدمة تحديداً: أضف RAPIDAPI_KEY، وإن أردت
-   خلاصات RSS مختلفة عن الافتراضية أضف أيضاً NEWS_RSS_FEED_URLS (نفس
-   القيم المستخدمة في خدمة الويب، أو انسخها من هناك).
-5. Railway يُشغّل هذا تلقائياً حسب الجدول — بدون أي كود جدولة إضافي.
+1. `python manage.py sync_data --live-only` — المباريات المباشرة الآن
+   فقط. **غير مُجدوَلة تلقائياً حالياً** — 100 طلب/شهر لا تسمح بأي فاصل
+   يستحق اسم "مباشر" (حتى فاصل 12 ساعة يستهلك الحصة كاملة إن أُضيف فوق
+   الوضع الثاني). تبقى متاحة للتشغيل اليدوي وقت الحاجة، مع الحماية
+   الموصوفة أدناه (RAPIDAPI_MIN_CALL_INTERVAL) لمنع استنزاف الحصة بها.
+2. `python manage.py sync_data` (بدون علم) — المزامنة الكاملة كل 30
+   دقيقة: جدول مباريات اليوم (قادمة/منتهية، وحالتها التقريبية من نفس
+   الـ Endpoint) + الأخبار (RSS، لا تستهلك حصة RapidAPI) + تنظيف
+   البيانات القديمة. جزء RapidAPI منها تحديداً محكوم بحد أدنى 12 ساعة
+   بين الطلبات الفعلية (RAPIDAPI_MIN_CALL_INTERVAL) بغضّ النظر عن تكرار
+   جدولة Celery نفسها كل 30 دقيقة — الأخبار والتنظيف يستمران بلا تأثر.
 
-ملاحظة: جدولة Railway بتوقيت UTC دائماً — ضع هذا في اعتبارك عند اختيار
-تكرار التشغيل.
+عند ترقية خطة RapidAPI لاحقاً لحصة أكبر: ارفع RAPIDAPI_MIN_CALL_INTERVAL
+هنا لفاصل أقصر يناسب الحصة الجديدة، وأعد تفعيل 'sync-live-matches' في
+CELERY_BEAT_SCHEDULE إن رغبتم بتحديث مباشر حقيقي.
+
+كلا الوضعين يُشغَّلان عبر عامل Celery (Command يُنفَّذ وينتهي فوراً،
+بلا حلقة أو اتصال مفتوح) — نفس مبدأ التشغيل السابق، فقط الجدولة نفسها
+انتقلت من Railway Cron/حلقة يدوية إلى Celery Beat.
 
 == مصادر بيانات المباريات (endpoint ان اثنان مكمّلان لبعضهما) ==
 1. `/football-current-live`: المباريات المباشرة الآن فقط — يُحدِّث
    النتيجة/الدقيقة لحظياً، ويُصنِّف أي مباراة اختفت منه (كانت مباشرة)
-   كـ "منتهية".
+   كـ "منتهية". (--live-only)
 2. `/football-get-matches-by-date`: جدول مباريات يوم كامل (بما فيها
    القادمة والمنتهية والمباشرة) — يُستخدم لتعبئة "مباريات اليوم القادمة"،
-   التي لا يوفّرها Endpoint المباشر وحده. لا يُعيد تصنيف مباراة صنّفها
-   Endpoint المباشر مسبقاً كـ "مباشرة" في نفس التشغيل (الأحدث/الأدق أولوية).
+   التي لا يوفّرها Endpoint المباشر وحده. لا يُعيد تصنيف أي مباراة
+   "مباشرة" حالياً في قاعدة البيانات (الأحدث/الأدق أولوية). (الوضع الكامل)
 
 == حدود صادقة ==
 حالات المباريات (status) وحقل موعد الانطلاق (kickoff) لهذا الـ Endpoint
@@ -60,9 +56,24 @@ from apps.core.integrations.ar_translations import translate_competition, transl
 from apps.core.integrations.push_notifications import send_topic_notification
 from apps.core.integrations.rapidapi_football import fetch_live_matches, fetch_matches_by_date
 from apps.core.integrations.rss_news import extract_image_url, extract_plain_text, fetch_entries
-from apps.core.models import Match, News
+from apps.core.models import IntegrationHealth, Match, News
 
 logger = logging.getLogger(__name__)
+
+INTEGRATION_KEY_RAPIDAPI = 'rapidapi'
+INTEGRATION_LABEL_RAPIDAPI = 'RapidAPI (بيانات المباريات)'
+
+# بعد فشل بسبب تجاوز الحصة الشهرية (429 quota)، نتوقف عن المحاولة لهذه
+# المدة قبل إعادة المحاولة تلقائياً — لا فائدة من تكرار طلب مضمون الفشل
+# في كل دورة حتى تتجدّد الحصة أو تُرفَع خطة الاشتراك
+QUOTA_COOLDOWN = timedelta(hours=6)
+
+# شبكة أمان مستقلة تماماً عن جدولة Celery نفسها: خطة BASIC الحالية توفّر
+# 100 طلب/شهر فقط (وليس يومياً) — حتى لو ضُبطت جدولة Celery بفاصل أقصر
+# بالخطأ مستقبلاً، هذا الحد الأدنى بين الطلبات الفعلية يمنع استهلاك الحصة
+# الشهرية بالكامل خلال أيام قليلة كما حدث فعلياً. عند 12 ساعة: طلبان في
+# اليوم كحد أقصى = ~60 طلباً/شهر، تاركاً هامشاً (~40) للاختبار اليدوي.
+RAPIDAPI_MIN_CALL_INTERVAL = timedelta(hours=12)
 
 _UPCOMING_STATUS_HINTS = {'ns', 'not started', 'scheduled', 'upcoming', 'pre', 'tbd', 'postponed'}
 _LIVE_STATUS_HINTS = {'1h', '2h', 'live', 'inplay', 'in play', 'ht', 'half time', 'et', 'p', 'pen'}
@@ -151,20 +162,106 @@ def _extract_common_fields(raw):
 
 
 class Command(BaseCommand):
-    help = 'يسحب المباريات والأخبار من مصادر خارجية. مُصمَّم للتشغيل عبر Railway Cron Job.'
+    help = 'يسحب المباريات والأخبار من مصادر خارجية. مُجدوَل عبر Celery Beat.'
+
+    def add_arguments(self, parser):
+        parser.add_argument(
+            '--live-only', action='store_true',
+            help=(
+                'تحديث المباريات المباشرة فقط (سريع، بدون أخبار/جدول اليوم/'
+                'تنظيف) — لتشغيله بفاصل قصير (5 دقائق حالياً) منفصل عن المزامنة '
+                'الكاملة (كل 30 دقيقة).'
+            ),
+        )
 
     def handle(self, *args, **options):
-        self.stdout.write('بدء المزامنة الدورية...')
+        if options['live_only']:
+            self._run_live_only()
+        else:
+            self._run_full_sync()
+
+    def _rapidapi_quota_cooldown_remaining(self):
+        """
+        إن كان آخر فشل مُسجَّل لـ RapidAPI سببه تجاوز الحصة (429 quota)،
+        ولا يزال ضمن فترة تهدئة قصيرة، نتخطى المحاولة الحالية كلياً بدل
+        تكرار طلب مضمون الفشل كل دورة (يضيف ضجيجاً في السجلات دون أي
+        فائدة، والحصة الشهرية لن تتجدّد بمجرد إعادة المحاولة على أي حال).
+        يُعاد المحاولة تلقائياً بعد انتهاء فترة التهدئة — قد تكون الحصة
+        تجدّدت، أو رُفعت خطة الاشتراك.
+        """
+        health = IntegrationHealth.objects.filter(key=INTEGRATION_KEY_RAPIDAPI).first()
+        if not health or health.is_healthy or not health.last_checked_at:
+            return None
+        if 'quota' not in health.last_error.lower():
+            return None
+
+        remaining = QUOTA_COOLDOWN - (timezone.now() - health.last_checked_at)
+        return remaining if remaining.total_seconds() > 0 else None
+
+    def _rapidapi_min_interval_remaining(self):
+        """
+        شبكة أمان مستقلة عن جدولة Celery — تُحسَب من آخر *محاولة* فعلية
+        (ناجحة أو فاشلة، عبر last_checked_at) بغضّ النظر عن جدول Celery
+        Beat نفسه. ضرورية تحديداً هنا: خطة RapidAPI الحالية 100 طلب/شهر
+        فقط (وليس يومياً) — بدون هذا الحد الأدنى، أي تشغيل يدوي متكرر
+        للاختبار (كما حدث فعلياً) يستهلك الحصة الشهرية كاملة خلال أيام.
+        """
+        health = IntegrationHealth.objects.filter(key=INTEGRATION_KEY_RAPIDAPI).first()
+        if not health or not health.last_checked_at:
+            return None
+
+        remaining = RAPIDAPI_MIN_CALL_INTERVAL - (timezone.now() - health.last_checked_at)
+        return remaining if remaining.total_seconds() > 0 else None
+
+    def _run_live_only(self):
+        api_key = os.environ.get('RAPIDAPI_KEY')
+        if not api_key:
+            self._record_rapidapi_failure('RAPIDAPI_KEY غير مضبوط في متغيرات البيئة.')
+            self.stdout.write(self.style.WARNING(
+                'RAPIDAPI_KEY غير مضبوط — تم تخطي مزامنة المباريات المباشرة.'
+            ))
+            return
+
+        cooldown = self._rapidapi_quota_cooldown_remaining()
+        if cooldown:
+            self.stdout.write(self.style.WARNING(
+                f'تخطي المحاولة — الحصة الشهرية لـ RapidAPI مستنفدة على الأغلب '
+                f'(سيُعاد المحاولة تلقائياً خلال {int(cooldown.total_seconds() // 60)} دقيقة).'
+            ))
+            return
+
+        min_interval = self._rapidapi_min_interval_remaining()
+        if min_interval:
+            self.stdout.write(self.style.WARNING(
+                f'تخطي المحاولة — الحد الأدنى بين طلبات RapidAPI لم يمرّ بعد '
+                f'(الحصة الشهرية محدودة جداً حالياً). سيُعاد المحاولة خلال '
+                f'{int(min_interval.total_seconds() // 60)} دقيقة.'
+            ))
+            return
 
         try:
-            matches_synced = self._sync_matches()
-            self.stdout.write(self.style.SUCCESS(f'تمت مزامنة {matches_synced} مباراة.'))
+            _, live_synced = self._sync_live_matches(api_key)
+        except Exception as e:
+            self._record_rapidapi_failure(str(e))
+            logger.error('فشلت مزامنة المباريات المباشرة: %s', e, exc_info=True)
+            self.stdout.write(self.style.ERROR(f'فشلت مزامنة المباريات المباشرة: {e}'))
+            return
+
+        self._record_rapidapi_success()
+        self.stdout.write(self.style.SUCCESS(f'تمت مزامنة {live_synced} مباراة مباشرة.'))
+
+    def _run_full_sync(self):
+        self.stdout.write('بدء المزامنة الدورية الكاملة...')
+
+        try:
+            matches_synced = self._sync_todays_fixtures()
+            self.stdout.write(self.style.SUCCESS(f'تمت مزامنة {matches_synced} مباراة من جدول اليوم.'))
         except Exception as e:
             # لا نرفع الاستثناء للأعلى (sys.exit بكود خطأ) عمداً هنا —
             # فشل مصدر بيانات واحد (مثلاً API المباريات متوقف مؤقتاً)
             # لا يجب أن يمنع تشغيل مزامنة الأخبار في نفس هذا التشغيل
-            logger.error('فشلت مزامنة المباريات: %s', e, exc_info=True)
-            self.stdout.write(self.style.ERROR(f'فشلت مزامنة المباريات: {e}'))
+            logger.error('فشلت مزامنة جدول اليوم: %s', e, exc_info=True)
+            self.stdout.write(self.style.ERROR(f'فشلت مزامنة جدول اليوم: {e}'))
 
         try:
             news_synced = self._sync_news()
@@ -179,7 +276,13 @@ class Command(BaseCommand):
             logger.error('فشل تنظيف البيانات القديمة: %s', e, exc_info=True)
             self.stdout.write(self.style.ERROR(f'فشل تنظيف البيانات القديمة: {e}'))
 
-        self.stdout.write('انتهت المزامنة — العملية ستُغلق الآن (متطلَّب من Railway Cron).')
+        self.stdout.write('انتهت المزامنة الكاملة.')
+
+    def _record_rapidapi_success(self):
+        IntegrationHealth.record_success(INTEGRATION_KEY_RAPIDAPI, INTEGRATION_LABEL_RAPIDAPI)
+
+    def _record_rapidapi_failure(self, message):
+        IntegrationHealth.record_failure(INTEGRATION_KEY_RAPIDAPI, INTEGRATION_LABEL_RAPIDAPI, message)
 
     def _prune_old_content(self):
         """
@@ -204,17 +307,55 @@ class Command(BaseCommand):
                 f'تم حذف {old_matches} مباراة قديمة منتهية و{old_news} خبر قديم (تنظيف دوري).'
             )
 
-    def _sync_matches(self):
+    def _sync_todays_fixtures(self):
+        """
+        جدول مباريات اليوم (قادمة/منتهية/مباشرة تقريبياً عبر status
+        الـ Endpoint نفسه) — المصدر الوحيد المُفعَّل حالياً لبيانات
+        RapidAPI، بسبب حصة شهرية صغيرة جداً (100 طلب/شهر على خطة BASIC)
+        لا تسمح بتحديث "مباشر" حقيقي مهما ضُبطت الجدولة (راجع
+        RAPIDAPI_MIN_CALL_INTERVAL أعلاه، وconfig/settings.py حيث عُطِّلت
+        مهمة --live-only السريعة لنفس السبب).
+        """
         api_key = os.environ.get('RAPIDAPI_KEY')
         if not api_key:
+            self._record_rapidapi_failure('RAPIDAPI_KEY غير مضبوط في متغيرات البيئة.')
             self.stdout.write(self.style.WARNING(
                 'RAPIDAPI_KEY غير مضبوط في متغيرات البيئة — تم تخطي مزامنة المباريات.'
             ))
             return 0
 
-        seen_live_ids, live_synced = self._sync_live_matches(api_key)
-        scheduled_synced = self._sync_matches_by_date(api_key, seen_live_ids)
-        return live_synced + scheduled_synced
+        cooldown = self._rapidapi_quota_cooldown_remaining()
+        if cooldown:
+            self.stdout.write(self.style.WARNING(
+                f'تخطي المحاولة — الحصة الشهرية لـ RapidAPI مستنفدة على الأغلب '
+                f'(سيُعاد المحاولة تلقائياً خلال {int(cooldown.total_seconds() // 60)} دقيقة).'
+            ))
+            return 0
+
+        min_interval = self._rapidapi_min_interval_remaining()
+        if min_interval:
+            self.stdout.write(self.style.WARNING(
+                f'تخطي المحاولة — الحد الأدنى بين طلبات RapidAPI لم يمرّ بعد '
+                f'(الحصة الشهرية محدودة جداً حالياً). سيُعاد المحاولة خلال '
+                f'{int(min_interval.total_seconds() // 60)} دقيقة.'
+            ))
+            return 0
+
+        try:
+            # لا نُعيد تصنيف مباراة "مباشرة" بالفعل في قاعدة البيانات (حدّثتها
+            # دورة --live-only الأخيرة) بحالة هذا الـ Endpoint الأقل دقة
+            # للحظة الحالية — نفس الحماية التي كانت موجودة سابقاً ضمن نفس
+            # التشغيل، الآن عبر قاعدة البيانات بدل نتيجة تشغيل متزامن واحد
+            live_external_ids = set(
+                Match.objects.filter(status=Match.Status.LIVE).values_list('external_id', flat=True)
+            )
+            scheduled_synced = self._sync_matches_by_date(api_key, live_external_ids)
+        except Exception as e:
+            self._record_rapidapi_failure(str(e))
+            raise
+
+        self._record_rapidapi_success()
+        return scheduled_synced
 
     def _sync_live_matches(self, api_key):
         raw_matches = fetch_live_matches(api_key)

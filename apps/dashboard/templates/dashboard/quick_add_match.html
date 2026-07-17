@@ -1,0 +1,85 @@
+{% extends "dashboard/base.html" %}
+{% block nav_quick_add %}active{% endblock %}
+{% block page_title %}إضافة مباراة سريعة{% endblock %}
+
+{% block content %}
+{% if messages %}
+{% for message in messages %}
+<div class="card alert-success">{{ message }}</div>
+{% endfor %}
+{% endif %}
+
+<div class="main-grid">
+  <div class="card panel">
+    <h2>إضافة مباراة جديدة</h2>
+    <p style="color:var(--muted); font-size:12px; margin-top:-10px;">
+      إدخال يدوي بالكامل — لا اتصال بأي مصدر خارجي. الفريقان والموعد فقط
+      إلزاميان؛ احفظ لتُعاد الصفحة فارغة فوراً لإدخال المباراة التالية.
+    </p>
+    <form method="post" class="quick-form">
+      {% csrf_token %}
+      <label for="{{ form.home_team.id_for_label }}">{{ form.home_team.label }}</label>
+      {{ form.home_team }}
+
+      <label for="{{ form.away_team.id_for_label }}">{{ form.away_team.label }}</label>
+      {{ form.away_team }}
+
+      <label for="{{ form.match_datetime.id_for_label }}">{{ form.match_datetime.label }}</label>
+      {{ form.match_datetime }}
+
+      <label for="{{ form.competition.id_for_label }}">{{ form.competition.label }}</label>
+      {{ form.competition }}
+
+      <label for="{{ form.channel.id_for_label }}">{{ form.channel.label }}</label>
+      {{ form.channel }}
+
+      <label for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
+      {{ form.status }}
+
+      {% if form.errors %}
+        <div class="errors">تحقّق من الحقول المطلوبة (الفريقان والموعد).</div>
+      {% endif %}
+
+      <button type="submit" class="btn btn-broadcast" style="width:100%; padding:12px; font-size:14px; margin-top:8px;">
+        حفظ وإضافة أخرى
+      </button>
+    </form>
+  </div>
+
+  <div class="card panel">
+    <h2>آخر المباريات المُضافة يدوياً</h2>
+    {% if recent_matches %}
+    <table class="matches">
+      <thead>
+        <tr>
+          <th>المباراة</th>
+          <th>الموعد</th>
+          <th>الحالة</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for match in recent_matches %}
+        <tr>
+          <td>{{ match.home_team }} vs {{ match.away_team }}</td>
+          <td>{{ match.match_datetime|date:"Y-m-d H:i" }}</td>
+          <td>{{ match.get_status_display }}</td>
+          <td><a class="btn btn-edit" href="/admin/core/match/{{ match.pk }}/change/">تعديل</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">لم تُضَف أي مباراة يدوياً بعد.</p>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+  // تركيز فوري على أول حقل — جزء من هدف "أقل من 10 ثوانٍ لكل مباراة"
+  document.addEventListener('DOMContentLoaded', function () {
+    var first = document.querySelector('.quick-form input[type="text"]');
+    if (first) first.focus();
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "dashboard/base.html" %}
+{% load static %}
+{% block nav_bulk_import %}active{% endblock %}
+{% block page_title %}استيراد جماعي للمباريات{% endblock %}
+
+{% block content %}
+{% if messages %}
+{% for message in messages %}
+<div class="card {% if message.tags == 'error' %}alert-banner{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %}">
+  {{ message }}
+</div>
+{% endfor %}
+{% endif %}
+
+<div class="main-grid">
+  <div class="card panel">
+    <h2>رفع ملف مباريات (CSV أو JSON)</h2>
+    <p style="color:var(--muted); font-size:12px;">
+      انسخ جدول المباريات يدوياً من أي مصدر، رتّبه في ملف بالأعمدة التالية، ثم ارفعه — بلا أي اتصال خارجي من النظام.
+    </p>
+    <ul style="color:var(--muted); font-size:12px; line-height:1.9; padding-inline-start:18px;">
+      <li><strong>الفريقان (إلزامي):</strong> عمودان <code>home_team</code> و<code>away_team</code>، أو عمود واحد باسم المباراة كاملاً مثل "الأهلي vs الزمالك".</li>
+      <li><strong>الموعد (إلزامي):</strong> عمود <code>match_datetime</code> (أو <code>date</code>) — أي صيغة تاريخ/وقت مفهومة، مثال: <code>17/07/2026 20:00</code>.</li>
+      <li><strong>البطولة (اختياري):</strong> عمود <code>competition</code>.</li>
+      <li><strong>شعارا الفريقين (اختياري):</strong> <code>home_team_logo_url</code> و<code>away_team_logo_url</code>.</li>
+      <li><strong>النتيجة الحالية (اختياري):</strong> <code>home_score</code> و<code>away_score</code> — أعد نسخ الجدول ورفعه لتحديث النتيجة؛ عمود غائب لا يمسح نتيجة موجودة مسبقاً.</li>
+    </ul>
+    <p style="color:var(--muted); font-size:12px;">
+      حالة المباراة (قادمة/مباشر الآن/منتهية) تُضبط تلقائياً بالكامل حسب الوقت — لا تُدخلها في الملف.
+    </p>
+    <p style="font-size:12px;">
+      نماذج جاهزة:
+      <a href="{% static 'dashboard/samples/matches_sample.csv' %}" download>CSV</a> ·
+      <a href="{% static 'dashboard/samples/matches_sample.json' %}" download>JSON</a>
+    </p>
+
+    <form method="post" enctype="multipart/form-data" class="quick-form">
+      {% csrf_token %}
+      <label for="file-input">اختر الملف</label>
+      <input id="file-input" type="file" name="file" accept=".csv,.json,.txt" required>
+      <button type="submit" class="btn btn-broadcast" style="width:100%; padding:12px; font-size:14px; margin-top:14px;">
+        رفع واستيراد
+      </button>
+    </form>
+
+    {% if import_result and import_result.row_errors %}
+    <div style="margin-top:18px;">
+      <h3 style="font-size:13px; color:var(--danger);">صفوف تعذّرت معالجتها ({{ import_result.row_errors|length }})</h3>
+      <table class="matches">
+        <thead>
+          <tr><th>السطر</th><th>السبب</th></tr>
+        </thead>
+        <tbody>
+          {% for line_number, raw_row, error_message in import_result.row_errors %}
+          <tr>
+            <td>{{ line_number }}</td>
+            <td>{{ error_message }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card panel">
+    <h2>آخر المباريات المُضافة يدوياً</h2>
+    {% if recent_matches %}
+    <table class="matches">
+      <thead>
+        <tr>
+          <th>المباراة</th>
+          <th>البطولة</th>
+          <th>الموعد</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for match in recent_matches %}
+        <tr>
+          <td>{{ match.home_team }} vs {{ match.away_team }}</td>
+          <td>{{ match.competition|default:"—" }}</td>
+          <td>{{ match.match_datetime|date:"Y-m-d H:i" }}</td>
+          <td><a class="btn btn-edit" href="/admin/core/match/{{ match.pk }}/change/">تعديل</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="empty">لم تُضَف أي مباراة يدوياً بعد.</p>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

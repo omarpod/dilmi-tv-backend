@@ -31,3 +31,15 @@ requests==2.32.3
 # إشعارات Push للتطبيق (Firebase Cloud Messaging) — عند بدء مباراة مباشرة
 # أو عند نشر تحديث جديد للتطبيق
 firebase-admin==6.6.0
+
+# Celery + Redis: طوابير المهام (مزامنة دورية + فحص صحة روابط البث) —
+# بديل لحلقة run_sync_loop اليدوية، وdjango-redis يُستخدم أيضاً كذاكرة
+# تخزين مؤقت مشتركة بين كل عمليات gunicorn (بدل LocMemCache لكل عملية)
+celery==5.4.0
+redis==5.0.8
+django-redis==5.4.0
+
+# تحليل تواريخ/أوقات مرنة الصيغة (استيراد جدول المباريات الجماعي من ملف
+# CSV/JSON يرفعه المستخدم يدوياً — راجع apps/core/bulk_import.py) — لا
+# يمكن التحكم بالصيغة التي سيلصقها المستخدم من Excel/Sheets يدوياً
+python-dateutil==2.9.0

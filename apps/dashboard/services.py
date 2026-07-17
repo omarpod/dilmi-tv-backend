@@ -7,11 +7,11 @@ apps/dashboard/services.py
 """
 from datetime import timedelta
 
-from django.db.models import Count, Max
+from django.db.models import Avg, Count, Max
 from django.utils import timezone
 
 from apps.analytics.models import Platform, ViewerSession, ViewerSnapshot
-from apps.core.models import Channel, Match, News
+from apps.core.models import Channel, IntegrationHealth, Match, News
 
 LIVE_THRESHOLD_SECONDS = 90
 
@@ -64,16 +64,50 @@ def get_dashboard_context():
             'total_matches': Match.objects.count(),
             'live_now': len(live_matches),
             'active_channels': Channel.objects.filter(is_active=True).count(),
-            'published_news': News.objects.filter(is_published=True).count(),
+            'published_news': News.objects.filter(status=News.Status.PUBLISHED).count(),
             'unique_devices_today': unique_devices_today,
             'engagement_pct': engagement_pct,
+            'visitor_growth_pct': _visitor_growth_pct(now),
         },
         'sparkline': _build_sparkline_svg(sparkline_values),
         'live_matches': live_matches,
         'upcoming_matches': upcoming_matches,
         'donut': _build_donut(live_threshold),
         'site_logo_url': _get_site_logo_url(),
+        'integration_alerts': _get_integration_alerts(),
     }
+
+
+def _get_integration_alerts():
+    """تنبيهات واضحة لأي تكامل خارجي (RapidAPI حالياً) فشلت آخر محاولة
+    اتصال به — بدل ترك الفشل صامتاً لا يظهر إلا في سجلات الـ worker.
+    راجع IntegrationHealth.record_success/record_failure في sync_data.py."""
+    return list(IntegrationHealth.objects.filter(is_healthy=False))
+
+
+def _visitor_growth_pct(now):
+    """
+    نسبة نمو الزوار: مقارنة متوسط عدد المشاهدين المباشرين خلال آخر 24
+    ساعة بمتوسطه خلال الـ 24 ساعة التي قبلها مباشرة، عبر ViewerSnapshot
+    (وليس ViewerSession التي تُحذف سطورها القديمة كل ساعة عبر
+    prune_analytics ولا تصلح إطلاقاً كمصدر لمقارنة تاريخية).
+
+    ترجع None بصدق (وليس صفراً وهمياً) إن لم تتوفر بيانات كافية بعد
+    للمقارنة — نفس فلسفة engagement_pct أعلاه.
+    """
+    last_24h_avg = ViewerSnapshot.objects.filter(
+        taken_at__gte=now - timedelta(hours=24),
+    ).aggregate(avg=Avg('live_viewers'))['avg']
+
+    prev_24h_avg = ViewerSnapshot.objects.filter(
+        taken_at__gte=now - timedelta(hours=48),
+        taken_at__lt=now - timedelta(hours=24),
+    ).aggregate(avg=Avg('live_viewers'))['avg']
+
+    if not prev_24h_avg:
+        return None
+
+    return round(((last_24h_avg - prev_24h_avg) / prev_24h_avg) * 100, 1)
 
 
 def _get_site_logo_url():
