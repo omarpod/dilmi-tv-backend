@@ -1,0 +1,47 @@
+{% extends "dashboard/base.html" %}
+{% block nav_channels %}active{% endblock %}
+{% block page_title %}القنوات{% endblock %}
+
+{% block content %}
+{% if messages %}
+{% for message in messages %}
+<div class="card {% if message.tags == 'error' %}alert-banner{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %}">{{ message }}</div>
+{% endfor %}
+{% endif %}
+
+<div class="card panel">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 style="margin:0;">القنوات</h2>
+    <a class="btn btn-broadcast" href="{% url 'dashboard:channel-add' %}">+ إضافة قناة</a>
+  </div>
+
+  {% if page_obj %}
+  <table class="matches" style="margin-top:14px;">
+    <thead>
+      <tr><th>الاسم</th><th>التصنيف</th><th>نشِطة؟</th><th>الترتيب</th><th>روابط بث نشِطة</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for channel in page_obj %}
+      <tr>
+        <td>{{ channel.name }}</td>
+        <td>{{ channel.get_category_display }}</td>
+        <td>{% if channel.is_active %}نعم{% else %}لا{% endif %}</td>
+        <td>{{ channel.order }}</td>
+        <td>{{ channel.sources.count }} <span class="muted">(تُدار من /admin/)</span></td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-edit" href="{% url 'dashboard:channel-edit' channel.pk %}">تعديل</a>
+          <form method="post" action="{% url 'dashboard:channel-delete' channel.pk %}" style="display:inline;" onsubmit="return confirm('حذف هذه القناة نهائياً؟ سيُحذف أيضاً كل روابط بثها.');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-end">حذف</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% include "dashboard/_pagination.html" %}
+  {% else %}
+  <p class="empty">لا توجد قنوات بعد.</p>
+  {% endif %}
+</div>
+{% endblock %}

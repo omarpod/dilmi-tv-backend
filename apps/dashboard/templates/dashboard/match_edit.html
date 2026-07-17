@@ -1,0 +1,21 @@
+{% extends "dashboard/base.html" %}
+{% block nav_matches %}active{% endblock %}
+{% block page_title %}تعديل مباراة{% endblock %}
+
+{% block content %}
+<div class="card panel" style="max-width:560px;">
+  <h2>{{ match.home_team }} vs {{ match.away_team }}</h2>
+  <form method="post" class="quick-form">
+    {% csrf_token %}
+    {% for field in form %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}<div class="errors">{{ field.errors|join:"، " }}</div>{% endif %}
+    {% endfor %}
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button type="submit" class="btn btn-broadcast" style="padding:10px 20px;">حفظ</button>
+      <a class="btn btn-edit" href="{% url 'dashboard:matches-list' %}" style="padding:10px 20px; text-decoration:none; display:inline-flex; align-items:center;">إلغاء</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

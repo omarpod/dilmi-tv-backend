@@ -3,11 +3,12 @@ from django.db.models import Prefetch
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page, never_cache
 from rest_framework import viewsets
+from rest_framework.generics import RetrieveAPIView
 
 from apps.streaming.models import StreamSource
 
-from .models import Channel, Match, News
-from .serializers import ChannelSerializer, MatchSerializer, NewsSerializer
+from .models import Channel, Match, News, SiteSettings
+from .serializers import AppConfigSerializer, ChannelSerializer, MatchSerializer, NewsSerializer
 
 # يُحمَّل مسبقاً (Prefetch) مع كل قناة عبر to_attr='active_sources' — بذلك
 # لا يُنفَّذ استعلام SQL منفصل لكل قناة/مباراة على حدة عند قراءة
@@ -55,3 +56,14 @@ class NewsViewSet(viewsets.ReadOnlyModelViewSet):
     """/api/news/ — تخزين مؤقت 5 دقائق (أقصر من القنوات لأن الأخبار تتحدّث أكثر)."""
     queryset = News.objects.filter(status=News.Status.PUBLISHED)
     serializer_class = NewsSerializer
+
+
+@method_decorator(cache_page(60 * 5), name='get')  # 5 دقائق
+class AppConfigView(RetrieveAPIView):
+    """/api/app-config/ — معرّفات شبكات الإعلانات (AdMob/Facebook/Unity)
+    التي يقرأها تطبيق Flutter عند الإقلاع، بدل تضمينها ثابتة في كود
+    التطبيق. صف واحد فقط (SiteSettings.get_solo) — لا حاجة لـ pk في الرابط."""
+    serializer_class = AppConfigSerializer
+
+    def get_object(self):
+        return SiteSettings.get_solo()

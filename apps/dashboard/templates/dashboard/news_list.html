@@ -1,0 +1,46 @@
+{% extends "dashboard/base.html" %}
+{% block nav_news %}active{% endblock %}
+{% block page_title %}الأخبار{% endblock %}
+
+{% block content %}
+{% if messages %}
+{% for message in messages %}
+<div class="card {% if message.tags == 'error' %}alert-banner{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %}">{{ message }}</div>
+{% endfor %}
+{% endif %}
+
+<div class="card panel">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 style="margin:0;">الأخبار</h2>
+    <a class="btn btn-broadcast" href="{% url 'dashboard:news-add' %}">+ إضافة خبر</a>
+  </div>
+
+  {% if page_obj %}
+  <table class="matches" style="margin-top:14px;">
+    <thead>
+      <tr><th>العنوان</th><th>الحالة</th><th>تاريخ الإنشاء</th><th>المصدر</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for item in page_obj %}
+      <tr>
+        <td>{{ item.title|truncatechars:60 }}</td>
+        <td>{{ item.get_status_display }}</td>
+        <td>{{ item.created_at|date:"Y-m-d H:i" }}</td>
+        <td>{% if item.source_url %}<a href="{{ item.source_url }}" target="_blank" rel="noopener">فتح</a>{% else %}يدوي{% endif %}</td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-edit" href="{% url 'dashboard:news-edit' item.pk %}">تعديل</a>
+          <form method="post" action="{% url 'dashboard:news-delete' item.pk %}" style="display:inline;" onsubmit="return confirm('حذف هذا الخبر نهائياً؟');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-end">حذف</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% include "dashboard/_pagination.html" %}
+  {% else %}
+  <p class="empty">لا توجد أخبار بعد.</p>
+  {% endif %}
+</div>
+{% endblock %}

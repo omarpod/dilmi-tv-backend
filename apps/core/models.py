@@ -87,6 +87,12 @@ class Match(TimeStampedModel):
         related_name='matches', verbose_name='قناة البث',
     )
 
+    # رابط بث مباشر خاص بهذه المباراة تحديداً — منفصل عن نظام StreamSource
+    # (قائمة روابط failover لكل قناة دائمة)، لأن هذا رابط لمباراة واحدة
+    # فقط. يُملأ يدوياً من صفحة التعديل، أو عبر دمج ملف روابط بث في
+    # الاستيراد الجماعي (راجع apps/core/bulk_import.py).
+    stream_url = models.URLField('رابط البث المباشر (خاص بالمباراة)', max_length=1000, blank=True, null=True)
+
     match_datetime = models.DateTimeField('موعد المباراة', db_index=True)
     status = models.CharField('الحالة', max_length=10, choices=Status.choices, default=Status.UPCOMING)
 
@@ -172,6 +178,45 @@ class SiteSettings(models.Model):
     يُرفع الشعار مرتين في مكانين منفصلين.
     """
     logo = models.ImageField('شعار الموقع', upload_to='site/', blank=True, null=True)
+
+    # إعدادات شبكات الإعلانات — تُقرأ من تطبيق Flutter عبر /api/app-config/
+    # حتى يمكن تغيير معرّفات الإعلانات وتفعيل/تعطيل كل شبكة على حدة دون
+    # إصدار تحديث جديد للتطبيق. مفتاح رئيسي (ads_enabled) يُطفئ كل
+    # الإعلانات دفعة واحدة، بالإضافة لمفتاح مستقل لكل شبكة.
+    ads_enabled = models.BooleanField('تفعيل الإعلانات في التطبيق (المفتاح الرئيسي)', default=False)
+
+    admob_enabled = models.BooleanField('تفعيل AdMob', default=False)
+    admob_app_id = models.CharField('AdMob — معرّف التطبيق (App ID)', max_length=100, blank=True)
+    admob_banner_ad_unit_id = models.CharField('AdMob — معرّف إعلان البانر (Banner)', max_length=100, blank=True)
+    admob_interstitial_ad_unit_id = models.CharField(
+        'AdMob — معرّف الإعلان البيني (Interstitial)', max_length=100, blank=True,
+    )
+    admob_rewarded_ad_unit_id = models.CharField(
+        'AdMob — معرّف الإعلان المكافأ (Rewarded)', max_length=100, blank=True,
+    )
+
+    facebook_ads_enabled = models.BooleanField('تفعيل Meta / Facebook Audience Network', default=False)
+    facebook_ads_placement_id = models.CharField(
+        'Facebook Audience Network — معرّف موضع البانر (Banner)', max_length=100, blank=True,
+    )
+    facebook_ads_interstitial_placement_id = models.CharField(
+        'Facebook Audience Network — معرّف موضع الإعلان البيني (Interstitial)', max_length=100, blank=True,
+    )
+    facebook_ads_rewarded_placement_id = models.CharField(
+        'Facebook Audience Network — معرّف موضع الإعلان المكافأ (Rewarded)', max_length=100, blank=True,
+    )
+
+    # شبكة إعلانية إضافية عامة (Unity Ads / AppLovin / أي شركة أخرى) — اسم
+    # الشبكة نص حر يُدخله المستخدم بنفسه بدل حصر الخيار بشركة واحدة بعينها
+    other_ads_enabled = models.BooleanField('تفعيل شبكة إعلانية أخرى', default=False)
+    other_ad_network_name = models.CharField('اسم الشبكة الإعلانية الأخرى', max_length=100, blank=True)
+    other_ad_banner_id = models.CharField('الشبكة الأخرى — معرّف إعلان البانر (Banner)', max_length=100, blank=True)
+    other_ad_interstitial_id = models.CharField(
+        'الشبكة الأخرى — معرّف الإعلان البيني (Interstitial)', max_length=100, blank=True,
+    )
+    other_ad_rewarded_id = models.CharField(
+        'الشبكة الأخرى — معرّف الإعلان المكافأ (Rewarded)', max_length=100, blank=True,
+    )
 
     class Meta:
         verbose_name = 'إعدادات الموقع'

@@ -36,8 +36,8 @@
 
     <form method="post" enctype="multipart/form-data" class="quick-form">
       {% csrf_token %}
-      <label for="file-input">اختر الملف</label>
-      <input id="file-input" type="file" name="file" accept=".csv,.json,.txt" required>
+      <label for="file-input">ملف المباريات</label>
+      <input id="file-input" type="file" name="file" accept=".csv,.json,.txt">
       <button type="submit" class="btn btn-broadcast" style="width:100%; padding:12px; font-size:14px; margin-top:14px;">
         رفع واستيراد
       </button>
@@ -52,6 +52,50 @@
         </thead>
         <tbody>
           {% for line_number, raw_row, error_message in import_result.row_errors %}
+          <tr>
+            <td>{{ line_number }}</td>
+            <td>{{ error_message }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% endif %}
+  </div>
+
+  <div class="card panel">
+    <h2>الدمج الذكي لروابط البث (اختياري)</h2>
+    <p style="color:var(--muted); font-size:12px;">
+      ملف منفصل بعمودين فقط: اسما الفريقين ورابط البث — يُدمَج تلقائياً مع أي مباراة موجودة في قاعدة البيانات (سواء
+      استوردتها للتو من ملف المباريات في نفس الرفعة، أو كانت موجودة مسبقاً) تحمل نفس اسمَي الفريقين تماماً.
+      إن تكرر نفس اسمَي الفريقين لأكثر من مباراة غير منتهية، يُرفَض الصف بدل تخمين المباراة الصحيحة.
+    </p>
+    <ul style="color:var(--muted); font-size:12px; line-height:1.9; padding-inline-start:18px;">
+      <li><strong>الفريقان (إلزامي):</strong> نفس أعمدة ملف المباريات (<code>home_team</code>/<code>away_team</code> أو عمود اسم مباراة واحد).</li>
+      <li><strong>رابط البث (إلزامي):</strong> عمود <code>stream_url</code> (أو <code>link</code>/<code>url</code>).</li>
+    </ul>
+    <p style="font-size:12px;">
+      نموذج جاهز: <a href="{% static 'dashboard/samples/stream_links_sample.csv' %}" download>CSV</a>
+    </p>
+
+    <form method="post" enctype="multipart/form-data" class="quick-form">
+      {% csrf_token %}
+      <label for="stream-links-input">ملف روابط البث</label>
+      <input id="stream-links-input" type="file" name="stream_links_file" accept=".csv,.json,.txt">
+      <button type="submit" class="btn btn-broadcast" style="width:100%; padding:12px; font-size:14px; margin-top:14px;">
+        رفع ودمج
+      </button>
+    </form>
+
+    {% if merge_result and merge_result.row_errors %}
+    <div style="margin-top:18px;">
+      <h3 style="font-size:13px; color:var(--danger);">صفوف تعذّر دمجها ({{ merge_result.row_errors|length }})</h3>
+      <table class="matches">
+        <thead>
+          <tr><th>السطر</th><th>السبب</th></tr>
+        </thead>
+        <tbody>
+          {% for line_number, raw_row, error_message in merge_result.row_errors %}
           <tr>
             <td>{{ line_number }}</td>
             <td>{{ error_message }}</td>
@@ -81,7 +125,7 @@
           <td>{{ match.home_team }} vs {{ match.away_team }}</td>
           <td>{{ match.competition|default:"—" }}</td>
           <td>{{ match.match_datetime|date:"Y-m-d H:i" }}</td>
-          <td><a class="btn btn-edit" href="/admin/core/match/{{ match.pk }}/change/">تعديل</a></td>
+          <td><a class="btn btn-edit" href="{% url 'dashboard:match-edit' match.pk %}">تعديل</a></td>
         </tr>
         {% endfor %}
       </tbody>

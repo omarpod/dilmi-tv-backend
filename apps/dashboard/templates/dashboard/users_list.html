@@ -1,0 +1,48 @@
+{% extends "dashboard/base.html" %}
+{% block nav_users %}active{% endblock %}
+{% block page_title %}المستخدمون{% endblock %}
+
+{% block content %}
+{% if messages %}
+{% for message in messages %}
+<div class="card {% if message.tags == 'error' %}alert-banner{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %}">{{ message }}</div>
+{% endfor %}
+{% endif %}
+
+<div class="card panel">
+  <div style="display:flex; justify-content:space-between; align-items:center;">
+    <h2 style="margin:0;">المستخدمون</h2>
+    <a class="btn btn-broadcast" href="{% url 'dashboard:user-add' %}">+ إضافة مستخدم</a>
+  </div>
+
+  {% if page_obj %}
+  <table class="matches" style="margin-top:14px;">
+    <thead>
+      <tr><th>اسم المستخدم</th><th>البريد الإلكتروني</th><th>موظف؟</th><th>نشِط؟</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for u in page_obj %}
+      <tr>
+        <td>{{ u.username }}{% if u.pk == request.user.pk %} <span class="muted">(أنت)</span>{% endif %}</td>
+        <td>{{ u.email|default:"—" }}</td>
+        <td>{% if u.is_staff %}نعم{% else %}لا{% endif %}</td>
+        <td>{% if u.is_active %}نعم{% else %}لا{% endif %}</td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-edit" href="{% url 'dashboard:user-edit' u.pk %}">تعديل</a>
+          {% if u.pk != request.user.pk %}
+          <form method="post" action="{% url 'dashboard:user-delete' u.pk %}" style="display:inline;" onsubmit="return confirm('حذف هذا المستخدم نهائياً؟');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-end">حذف</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% include "dashboard/_pagination.html" %}
+  {% else %}
+  <p class="empty">لا يوجد مستخدمون.</p>
+  {% endif %}
+</div>
+{% endblock %}

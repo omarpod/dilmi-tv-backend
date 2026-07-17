@@ -25,10 +25,19 @@ apps/core/bulk_import.py
 تجنّب التكرار: Match.objects.update_or_create() بمفتاح (home_team,
 away_team, match_datetime) — نفس المباراة بنفس الفريقين ونفس التوقيت
 تُحدَّث بدل تكرارها؛ رفع نفس الملف مرتين آمن تماماً. الحقول الاختيارية
-(الشعاران والنتيجة) تُحدَّث فقط إن وُجدت فعلياً في الصف — عمود غائب لا
-يمسح قيمة موجودة مسبقاً (مثال: رفع جدول بلا أعمدة نتيجة لا يُصفّر نتيجة
-مباراة مباشرة بالفعل). الحالة (status) لا تُضبط من الملف إطلاقاً — نظام
-منفصل تلقائي بالكامل يعتمد على الوقت (راجع apps/core/tasks.py).
+(الشعاران والنتيجة ورابط البث) تُحدَّث فقط إن وُجدت فعلياً في الصف —
+عمود غائب لا يمسح قيمة موجودة مسبقاً (مثال: رفع جدول بلا أعمدة نتيجة لا
+يُصفّر نتيجة مباراة مباشرة بالفعل). الحالة (status) لا تُضبط من الملف
+إطلاقاً — نظام منفصل تلقائي بالكامل يعتمد على الوقت (راجع
+apps/core/tasks.py).
+
+الدمج الذكي لروابط البث (run_stream_link_merge): ملف ثانٍ منفصل يرفعه
+المستخدم إلى جانب ملف المباريات — عمودان فقط: اسما الفريقين ورابط
+البث. لكل صف، يبحث عن مباراة موجودة فعلاً في قاعدة البيانات بنفس اسمَي
+الفريقين (مطابقة نصية غير حساسة لحالة الأحرف) ويضبط حقل stream_url
+عليها. إن لم توجد أي مباراة مطابقة، أو وُجد أكثر من مباراة غير منتهية
+بنفس اسمَي الفريقين (غموض حقيقي — أي فريقين قد يتقابلان أكثر من مرة)،
+يُسجَّل الصف كخطأ بدل التخمين وربط الرابط بمباراة خاطئة.
 """
 import csv
 import io
@@ -54,6 +63,7 @@ _HOME_LOGO_KEYS = ['home_team_logo_url', 'home_logo', 'شعار_المضيف', '
 _AWAY_LOGO_KEYS = ['away_team_logo_url', 'away_logo', 'شعار_الضيف', 'شعار_الفريق_الضيف']
 _HOME_SCORE_KEYS = ['home_score', 'نتيجة_المضيف', 'اهداف_المضيف', 'أهداف_المضيف']
 _AWAY_SCORE_KEYS = ['away_score', 'نتيجة_الضيف', 'اهداف_الضيف', 'أهداف_الضيف']
+_STREAM_URL_KEYS = ['stream_url', 'stream_link', 'link', 'url', 'رابط', 'رابط_البث', 'رابط_المباراة']
 
 _NAME_SEPARATORS = [' vs ', ' VS ', ' Vs ', ' × ', ' ضد ', ' - ', ' – ', ' — ']
 
@@ -153,6 +163,10 @@ def _parse_row(row):
         except (ValueError, TypeError):
             pass
 
+    stream_url = _find_value(row, _STREAM_URL_KEYS)
+    if stream_url:
+        parsed['defaults']['stream_url'] = stream_url
+
     return parsed
 
 
@@ -187,6 +201,79 @@ def _iter_rows(raw_bytes, filename):
         if not any((v or '').strip() for v in row.values()):
             continue  # صف فارغ تماماً (شائع كسطر أخير) — يُتجاهَل بصمت
         yield index, row
+
+
+class StreamLinkMergeResult:
+    def __init__(self):
+        self.matched = 0
+        self.row_errors = []  # [(line_number, raw_row, message), ...]
+
+
+def _parse_stream_link_row(row):
+    home = _find_value(row, _HOME_TEAM_KEYS)
+    away = _find_value(row, _AWAY_TEAM_KEYS)
+
+    if not home or not away:
+        match_name = _find_value(row, _MATCH_NAME_KEYS)
+        if match_name:
+            home, away = _split_match_name(match_name)
+
+    if not home or not away:
+        raise RowError('تعذّر تحديد اسمَي الفريقين (تحقّق من أعمدة home_team/away_team أو عمود اسم المباراة)')
+
+    stream_url = _find_value(row, _STREAM_URL_KEYS)
+    if not stream_url:
+        raise RowError('عمود رابط البث (stream_url) مفقود أو فارغ')
+
+    return home, away, stream_url
+
+
+def run_stream_link_merge(raw_bytes, filename):
+    """
+    يدمج ملف روابط بث (اسما الفريقين + رابط) مع مباريات موجودة فعلاً في
+    قاعدة البيانات — بالاسمين فقط كمفتاح مطابقة، بلا أي اتصال خارجي: كل
+    البيانات في الملفين مرفوعة يدوياً من طرف المستخدم مسبقاً.
+    """
+    result = StreamLinkMergeResult()
+    rows = list(_iter_rows(raw_bytes, filename))
+
+    if len(rows) > MAX_ROWS:
+        raise BulkImportError(f'الملف يحتوي {len(rows)} صفاً — الحد الأقصى لكل رفعة هو {MAX_ROWS}.')
+
+    for line_number, raw_row in rows:
+        try:
+            home, away, stream_url = _parse_stream_link_row(raw_row)
+        except RowError as e:
+            result.row_errors.append((line_number, raw_row, str(e)))
+            continue
+
+        candidates = Match.objects.filter(home_team__iexact=home, away_team__iexact=away)
+        count = candidates.count()
+
+        if count == 0:
+            result.row_errors.append(
+                (line_number, raw_row, f'لا توجد مباراة بالاسمين "{home}" و"{away}" في قاعدة البيانات'),
+            )
+            continue
+
+        if count > 1:
+            # أكثر من مباراة بنفس الاسمين (لقاءات سابقة مثلاً) — استبعاد
+            # المنتهية أولاً، فإن بقي أكثر من واحدة فالغموض حقيقي ولا يُخمَّن
+            candidates = candidates.exclude(status=Match.Status.FINISHED)
+            count = candidates.count()
+            if count != 1:
+                result.row_errors.append((
+                    line_number, raw_row,
+                    f'أكثر من مباراة مطابقة للاسمين "{home}" و"{away}" — تعذّر تحديد الوجهة الصحيحة بدقة',
+                ))
+                continue
+
+        match = candidates.first()
+        match.stream_url = stream_url
+        match.save(update_fields=['stream_url', 'updated_at'])
+        result.matched += 1
+
+    return result
 
 
 def run_bulk_import(raw_bytes, filename):

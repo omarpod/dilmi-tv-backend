@@ -1,0 +1,22 @@
+{% extends "dashboard/base.html" %}
+{% block nav_users %}active{% endblock %}
+{% block page_title %}{% if target %}تعديل مستخدم{% else %}إضافة مستخدم{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card panel" style="max-width:480px;">
+  <h2>{% if target %}{{ target.username }}{% else %}مستخدم جديد{% endif %}</h2>
+  <form method="post" class="quick-form">
+    {% csrf_token %}
+    {% for field in form %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.help_text %}<span class="muted" style="font-size:11px;">{{ field.help_text }}</span>{% endif %}
+      {% if field.errors %}<div class="errors">{{ field.errors|join:"، " }}</div>{% endif %}
+    {% endfor %}
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button type="submit" class="btn btn-broadcast" style="padding:10px 20px;">حفظ</button>
+      <a class="btn btn-edit" href="{% url 'dashboard:users-list' %}" style="padding:10px 20px; text-decoration:none; display:inline-flex; align-items:center;">إلغاء</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,24 @@
+{% extends "dashboard/base.html" %}
+{% block nav_channels %}active{% endblock %}
+{% block page_title %}{% if channel %}تعديل قناة{% else %}إضافة قناة{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card panel" style="max-width:560px;">
+  <h2>{% if channel %}{{ channel.name }}{% else %}قناة جديدة{% endif %}</h2>
+  <form method="post" enctype="multipart/form-data" class="quick-form">
+    {% csrf_token %}
+    {% for field in form %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {% if field.name == 'logo' and channel and channel.logo %}
+        <img src="{{ channel.logo.url }}" alt="" style="height:40px; margin-bottom:6px; display:block;">
+      {% endif %}
+      {{ field }}
+      {% if field.errors %}<div class="errors">{{ field.errors|join:"، " }}</div>{% endif %}
+    {% endfor %}
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button type="submit" class="btn btn-broadcast" style="padding:10px 20px;">حفظ</button>
+      <a class="btn btn-edit" href="{% url 'dashboard:channels-list' %}" style="padding:10px 20px; text-decoration:none; display:inline-flex; align-items:center;">إلغاء</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

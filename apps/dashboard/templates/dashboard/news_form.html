@@ -1,0 +1,24 @@
+{% extends "dashboard/base.html" %}
+{% block nav_news %}active{% endblock %}
+{% block page_title %}{% if news_item %}تعديل خبر{% else %}إضافة خبر{% endif %}{% endblock %}
+
+{% block content %}
+<div class="card panel" style="max-width:640px;">
+  <h2>{% if news_item %}{{ news_item.title|truncatechars:50 }}{% else %}خبر جديد{% endif %}</h2>
+  <form method="post" enctype="multipart/form-data" class="quick-form">
+    {% csrf_token %}
+    {% for field in form %}
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {% if field.name == 'image' and news_item and news_item.image %}
+        <img src="{{ news_item.image.url }}" alt="" style="max-height:80px; margin-bottom:6px; display:block; border-radius:8px;">
+      {% endif %}
+      {{ field }}
+      {% if field.errors %}<div class="errors">{{ field.errors|join:"، " }}</div>{% endif %}
+    {% endfor %}
+    <div style="display:flex; gap:10px; margin-top:16px;">
+      <button type="submit" class="btn btn-broadcast" style="padding:10px 20px;">حفظ</button>
+      <a class="btn btn-edit" href="{% url 'dashboard:news-list' %}" style="padding:10px 20px; text-decoration:none; display:inline-flex; align-items:center;">إلغاء</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

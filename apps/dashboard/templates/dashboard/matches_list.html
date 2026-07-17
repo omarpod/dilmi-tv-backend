@@ -1,0 +1,90 @@
+{% extends "dashboard/base.html" %}
+{% block nav_matches %}active{% endblock %}
+{% block page_title %}المباريات{% endblock %}
+
+{% block content %}
+{% if messages %}
+{% for message in messages %}
+<div class="card {% if message.tags == 'error' %}alert-banner{% elif message.tags == 'warning' %}alert-warning{% else %}alert-success{% endif %}">{{ message }}</div>
+{% endfor %}
+{% endif %}
+
+<div class="card panel" style="margin-bottom:16px;">
+  <h2>مباريات اليوم</h2>
+  {% if todays_matches %}
+  <table class="matches">
+    <thead>
+      <tr><th>المباراة</th><th>البطولة</th><th>الوقت</th><th>الحالة</th><th>النتيجة</th></tr>
+    </thead>
+    <tbody>
+      {% for match in todays_matches %}
+      <tr>
+        <td>{{ match.home_team }} vs {{ match.away_team }}</td>
+        <td>{{ match.competition|default:"—" }}</td>
+        <td>{{ match.match_datetime|date:"H:i" }}</td>
+        <td>
+          {% if match.status == 'live' %}<span class="badge-live">مباشر</span>
+          {% elif match.status == 'finished' %}منتهت
+          {% else %}قادمة{% endif %}
+        </td>
+        <td>{% if match.status != 'upcoming' %}{{ match.home_score }} - {{ match.away_score }}{% else %}—{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">لا توجد مباريات اليوم.</p>
+  {% endif %}
+</div>
+
+<div class="card panel">
+  <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+    <h2 style="margin:0;">كل المباريات</h2>
+    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+      <a class="btn {% if not status_filter %}btn-broadcast{% else %}btn-edit{% endif %}" href="?">الكل</a>
+      {% for value, label in status_choices %}
+      <a class="btn {% if status_filter == value %}btn-broadcast{% else %}btn-edit{% endif %}" href="?status={{ value }}">{{ label }}</a>
+      {% endfor %}
+      <a class="btn btn-broadcast" href="{% url 'dashboard:quick-add-match' %}">+ إضافة</a>
+    </div>
+  </div>
+
+  {% if page_obj %}
+  <table class="matches" style="margin-top:14px;">
+    <thead>
+      <tr>
+        <th>المباراة</th><th>البطولة</th><th>الموعد</th><th>الحالة</th>
+        <th>النتيجة</th><th>القناة</th><th>رابط بث</th><th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for match in page_obj %}
+      <tr>
+        <td>{{ match.home_team }} vs {{ match.away_team }}</td>
+        <td>{{ match.competition|default:"—" }}</td>
+        <td>{{ match.match_datetime|date:"Y-m-d H:i" }}</td>
+        <td>
+          {% if match.status == 'live' %}<span class="badge-live">مباشر</span>
+          {% elif match.status == 'finished' %}منتهت
+          {% else %}قادمة{% endif %}
+        </td>
+        <td>{% if match.status != 'upcoming' %}{{ match.home_score }} - {{ match.away_score }}{% else %}—{% endif %}</td>
+        <td>{{ match.channel.name|default:"—" }}</td>
+        <td>{% if match.stream_url %}<span class="muted">✓</span>{% else %}—{% endif %}</td>
+        <td style="white-space:nowrap;">
+          <a class="btn btn-edit" href="{% url 'dashboard:match-edit' match.pk %}">تعديل</a>
+          <form method="post" action="{% url 'dashboard:match-delete' match.pk %}" style="display:inline;" onsubmit="return confirm('حذف هذه المباراة نهائياً؟');">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-end">حذف</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% include "dashboard/_pagination.html" %}
+  {% else %}
+  <p class="empty">لا توجد مباريات.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -69,7 +69,7 @@
           <td>{{ match.live_viewers }}</td>
           <td><span class="badge-live">مباشر</span></td>
           <td style="white-space:nowrap;">
-            <a class="btn btn-edit" href="/admin/core/match/{{ match.pk }}/change/">تعديل</a>
+            <a class="btn btn-edit" href="{% url 'dashboard:match-edit' match.pk %}">تعديل</a>
             <form method="post" action="{% url 'dashboard:broadcast-toggle' match.pk %}" style="display:inline;">
               {% csrf_token %}
               <button type="submit" class="btn btn-end">إنهاء</button>
@@ -127,7 +127,7 @@
         <td>{{ match.match_datetime|date:"Y-m-d H:i" }}</td>
         <td>{{ match.channel.name|default:"—" }}</td>
         <td style="white-space:nowrap;">
-          <a class="btn btn-edit" href="/admin/core/match/{{ match.pk }}/change/">تعديل</a>
+          <a class="btn btn-edit" href="{% url 'dashboard:match-edit' match.pk %}">تعديل</a>
           <form method="post" action="{% url 'dashboard:broadcast-toggle' match.pk %}" style="display:inline;">
             {% csrf_token %}
             <button type="submit" class="btn btn-broadcast">بدء البث</button>
