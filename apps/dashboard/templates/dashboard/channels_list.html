@@ -16,13 +16,25 @@
   </div>
 
   {% if page_obj %}
-  <table class="matches" style="margin-top:14px;">
+  <form id="channels-bulk-delete-form" method="post" action="{% url 'dashboard:channels-bulk-delete' %}" onsubmit="return confirm('حذف كل القنوات المحدَّدة نهائياً؟ سيُحذف أيضاً كل روابط بثها.');">
+    {% csrf_token %}
+  </form>
+
+  <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+    <button type="submit" form="channels-bulk-delete-form" class="btn btn-end">حذف المحدَّد</button>
+  </div>
+
+  <table class="matches" style="margin-top:10px;">
     <thead>
-      <tr><th>الاسم</th><th>التصنيف</th><th>نشِطة؟</th><th>الترتيب</th><th>روابط بث نشِطة</th><th></th></tr>
+      <tr>
+        <th style="width:36px;"><input type="checkbox" onclick="var checked=this.checked; document.querySelectorAll('.channel-select').forEach(function(cb){cb.checked = checked;});"></th>
+        <th>الاسم</th><th>التصنيف</th><th>نشِطة؟</th><th>الترتيب</th><th>روابط بث نشِطة</th><th></th>
+      </tr>
     </thead>
     <tbody>
       {% for channel in page_obj %}
       <tr>
+        <td><input type="checkbox" class="channel-select" name="selected_ids" value="{{ channel.pk }}" form="channels-bulk-delete-form"></td>
         <td>{{ channel.name }}</td>
         <td>{{ channel.get_category_display }}</td>
         <td>{% if channel.is_active %}نعم{% else %}لا{% endif %}</td>

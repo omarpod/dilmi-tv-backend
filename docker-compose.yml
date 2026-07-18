@@ -1,0 +1,94 @@
+# docker-compose.yml — جاهز للإنتاج على VPS: Django (web) + Redis + Postgres
+# + Celery (worker + beat) كخدمات منفصلة داخل حاويات.
+#
+# التشغيل:
+#   cp .env.example .env   # ثم املأ القيم الحقيقية
+#   docker compose up -d --build
+#
+# التوسّع الأفقي لعمّال Celery (لا حاجة لأي إعداد إضافي — كلهم يستهلكون
+# من نفس طابور Redis):
+#   docker compose up -d --scale worker=3
+#
+# ملاحظة مهمة: خدمة "beat" *لا* يجب توسيعها إطلاقاً (تبقى نسخة واحدة
+# دائماً) — وإلا نُفِّذت كل مهمة مجدولة عدة مرات في نفس اللحظة. هذا
+# سبب فصلها عن "worker" في خدمة مستقلة بدل استخدام `celery worker -B`.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-dilmi_tv}
+      POSTGRES_USER: ${POSTGRES_USER:-dilmi_tv}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?يجب ضبط POSTGRES_PASSWORD في .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dilmi_tv}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    restart: unless-stopped
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput --upload-unhashed-files &&
+             python manage.py ensure_superuser &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dilmi_tv}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dilmi_tv}
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info --concurrency=4
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dilmi_tv}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dilmi_tv}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  beat:
+    build: .
+    restart: unless-stopped
+    # لا تُوسِّع هذه الخدمة أبداً (راجع الملاحظة أعلى الملف)
+    command: celery -A config beat --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-dilmi_tv}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-dilmi_tv}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:

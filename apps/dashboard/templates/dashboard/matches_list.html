@@ -50,9 +50,19 @@
   </div>
 
   {% if page_obj %}
-  <table class="matches" style="margin-top:14px;">
+  <form id="matches-bulk-delete-form" method="post" action="{% url 'dashboard:matches-bulk-delete' %}" onsubmit="return confirm('حذف كل المباريات المحدَّدة نهائياً؟');">
+    {% csrf_token %}
+    <input type="hidden" name="status_filter" value="{{ status_filter }}">
+  </form>
+
+  <div style="display:flex; justify-content:flex-end; margin-top:10px;">
+    <button type="submit" form="matches-bulk-delete-form" class="btn btn-end">حذف المحدَّد</button>
+  </div>
+
+  <table class="matches" style="margin-top:10px;">
     <thead>
       <tr>
+        <th style="width:36px;"><input type="checkbox" onclick="var checked=this.checked; document.querySelectorAll('.match-select').forEach(function(cb){cb.checked = checked;});"></th>
         <th>المباراة</th><th>البطولة</th><th>الموعد</th><th>الحالة</th>
         <th>النتيجة</th><th>القناة</th><th>رابط بث</th><th></th>
       </tr>
@@ -60,6 +70,7 @@
     <tbody>
       {% for match in page_obj %}
       <tr>
+        <td><input type="checkbox" class="match-select" name="selected_ids" value="{{ match.pk }}" form="matches-bulk-delete-form"></td>
         <td>{{ match.home_team }} vs {{ match.away_team }}</td>
         <td>{{ match.competition|default:"—" }}</td>
         <td>{{ match.match_datetime|date:"Y-m-d H:i" }}</td>

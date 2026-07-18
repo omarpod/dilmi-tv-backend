@@ -5,6 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib.auth.views import LoginView
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.cache import never_cache
 
@@ -226,6 +227,27 @@ def match_delete(request, pk):
     return redirect('dashboard:matches-list')
 
 
+@staff_required
+def matches_bulk_delete(request):
+    if request.method != 'POST':
+        return redirect('dashboard:matches-list')
+
+    ids = request.POST.getlist('selected_ids')
+    if not ids:
+        messages.warning(request, 'لم تُحدَّد أي مباراة للحذف.')
+    else:
+        queryset = Match.objects.filter(pk__in=ids)
+        deleted_count = queryset.count()
+        queryset.delete()
+        messages.success(request, f'تم حذف {deleted_count} مباراة.')
+
+    status_filter = request.POST.get('status_filter', '')
+    redirect_url = reverse('dashboard:matches-list')
+    if status_filter:
+        redirect_url += f'?status={status_filter}'
+    return redirect(redirect_url)
+
+
 # =============================================================================
 # القنوات — قائمة / إضافة / تعديل / حذف (بديل دائم لـ /admin/core/channel/)
 # روابط البث (StreamSource) تبقى تُدار من /admin/ فقط عمداً — خارج نطاق
@@ -261,6 +283,23 @@ def channel_delete(request, pk):
     name = channel.name
     channel.delete()
     messages.success(request, f'تم حذف القناة: {name}')
+    return redirect('dashboard:channels-list')
+
+
+@staff_required
+def channels_bulk_delete(request):
+    if request.method != 'POST':
+        return redirect('dashboard:channels-list')
+
+    ids = request.POST.getlist('selected_ids')
+    if not ids:
+        messages.warning(request, 'لم تُحدَّد أي قناة للحذف.')
+    else:
+        queryset = Channel.objects.filter(pk__in=ids)
+        deleted_count = queryset.count()
+        queryset.delete()
+        messages.success(request, f'تم حذف {deleted_count} قناة (وكل روابط بثها).')
+
     return redirect('dashboard:channels-list')
 
 

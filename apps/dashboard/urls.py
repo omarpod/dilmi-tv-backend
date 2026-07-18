@@ -18,12 +18,14 @@ urlpatterns = [
     path('matches/<uuid:pk>/broadcast/', views.broadcast_toggle, name='broadcast-toggle'),
     path('matches/<uuid:pk>/edit/', views.match_edit, name='match-edit'),
     path('matches/<uuid:pk>/delete/', views.match_delete, name='match-delete'),
+    path('matches/bulk-delete/', views.matches_bulk_delete, name='matches-bulk-delete'),
 
     # القنوات
     path('channels/', views.channels_list, name='channels-list'),
     path('channels/add/', views.channel_form, name='channel-add'),
     path('channels/<uuid:pk>/edit/', views.channel_form, name='channel-edit'),
     path('channels/<uuid:pk>/delete/', views.channel_delete, name='channel-delete'),
+    path('channels/bulk-delete/', views.channels_bulk_delete, name='channels-bulk-delete'),
 
     # الأخبار
     path('news/', views.news_list, name='news-list'),
