@@ -1,5 +1,6 @@
 """apps/core/views.py"""
 from django.db.models import Prefetch
+from django.http import HttpResponse
 from django.utils.decorators import method_decorator
 from django.views.decorators.cache import cache_page, never_cache
 from rest_framework import viewsets
@@ -67,3 +68,15 @@ class AppConfigView(RetrieveAPIView):
 
     def get_object(self):
         return SiteSettings.get_solo()
+
+
+@never_cache
+def app_ads_txt(request):
+    """
+    /app-ads.txt — من جذر النطاق مباشرة (راجع config/urls.py)، وليس أي
+    مسار فرعي، لأن أدوات زحف شبكات الإعلانات (AdMob وغيرها) تبحث عن هذا
+    المسار بالذات لتأكيد تخويل الحساب الإعلاني قبل عرض إعلانات حقيقية —
+    بدونه تنخفض التعبئة (Fill Rate) كثيراً أو تنعدم لحساب جديد.
+    """
+    content = SiteSettings.get_solo().app_ads_txt
+    return HttpResponse(content, content_type='text/plain; charset=utf-8')

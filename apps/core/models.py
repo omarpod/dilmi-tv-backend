@@ -218,6 +218,18 @@ class SiteSettings(models.Model):
         'الشبكة الأخرى — معرّف الإعلان المكافأ (Rewarded)', max_length=100, blank=True,
     )
 
+    # ملف app-ads.txt — تتحقق منه شبكات الإعلانات (AdMob وغيرها) عبر
+    # زحفها الدوري لتأكيد أن هذا الموقع مخوَّل فعلاً ببيع إعلانات لحسابكم
+    # الإعلاني؛ بدونه تنخفض تعبئة الإعلانات (Fill Rate) كثيراً أو تنعدم،
+    # خصوصاً لحساب AdMob جديد. يُقدَّم من جذر النطاق مباشرة (راجع
+    # config/urls.py + apps/core/views.py: app_ads_txt) — وليس من مسار
+    # فرعي، لأن أدوات الزحف تبحث عن <domain>/app-ads.txt تحديداً.
+    app_ads_txt = models.TextField(
+        'محتوى ملف app-ads.txt', blank=True,
+        help_text='سطر واحد لكل شبكة إعلانية، بالصيغة التي تعطيها لك الشبكة نفسها '
+                   '(مثال من AdMob: google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0)',
+    )
+
     class Meta:
         verbose_name = 'إعدادات الموقع'
         verbose_name_plural = 'إعدادات الموقع'

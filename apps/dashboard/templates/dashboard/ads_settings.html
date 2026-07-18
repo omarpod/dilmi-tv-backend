@@ -70,6 +70,18 @@
       {{ form.other_ad_rewarded_id }}
     </div>
 
+    <div class="ads-network-card">
+      <h3>ملف app-ads.txt</h3>
+      <p class="muted" style="font-size:12px; margin-top:0;">
+        تتحقق شبكات الإعلانات (AdMob وغيرها) من هذا الملف عبر زحفها الدوري لتأكيد أن هذا الموقع مخوَّل ببيع إعلانات
+        لحسابكم — بدونه تنخفض تعبئة الإعلانات كثيراً أو تنعدم، خصوصاً لحساب AdMob جديد. الصق هنا بالضبط السطر الذي
+        تعطيه لك كل شبكة (سطر واحد لكل شبكة). يُنشَر تلقائياً على <code>{{ request.scheme }}://{{ request.get_host }}/app-ads.txt</code>
+        فور الحفظ. Google يحتاج حتى 24 ساعة للزحف والتحقق منه بعد نشره.
+      </p>
+      <label for="{{ form.app_ads_txt.id_for_label }}">{{ form.app_ads_txt.label }}</label>
+      {{ form.app_ads_txt }}
+    </div>
+
     {% if form.non_field_errors %}<div class="errors">{{ form.non_field_errors|join:"، " }}</div>{% endif %}
 
     <div style="margin-top:18px;">

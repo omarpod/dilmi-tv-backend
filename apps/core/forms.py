@@ -101,7 +101,11 @@ class AdsSettingsForm(forms.ModelForm):
             'facebook_ads_interstitial_placement_id', 'facebook_ads_rewarded_placement_id',
             'other_ads_enabled', 'other_ad_network_name',
             'other_ad_banner_id', 'other_ad_interstitial_id', 'other_ad_rewarded_id',
+            'app_ads_txt',
         ]
+        widgets = {
+            'app_ads_txt': forms.Textarea(attrs={'rows': 5, 'placeholder': 'google.com, pub-XXXXXXXXXXXXXXXX, DIRECT, f08c47fec0942fa0'}),
+        }
         labels = {
             'ads_enabled': 'تفعيل الإعلانات في التطبيق (المفتاح الرئيسي)',
             'admob_enabled': 'تفعيل AdMob',
@@ -118,6 +122,7 @@ class AdsSettingsForm(forms.ModelForm):
             'other_ad_banner_id': 'الشبكة الأخرى — معرّف إعلان البانر (Banner)',
             'other_ad_interstitial_id': 'الشبكة الأخرى — معرّف الإعلان البيني (Interstitial)',
             'other_ad_rewarded_id': 'الشبكة الأخرى — معرّف الإعلان المكافأ (Rewarded)',
+            'app_ads_txt': 'محتوى ملف app-ads.txt',
         }
 
     def __init__(self, *args, **kwargs):
